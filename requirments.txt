@@ -1,0 +1,8 @@
+pytest
+requests
+selenium
+pytest-xdist
+pytest-rerunfailures
+allure-pytest
+httpx
+pytest-asyncio

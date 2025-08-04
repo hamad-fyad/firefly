@@ -1,0 +1,4 @@
+.db.env
+*.env
+secrets.txt
+.venv
