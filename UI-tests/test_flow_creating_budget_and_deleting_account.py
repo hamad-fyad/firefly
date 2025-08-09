@@ -5,13 +5,17 @@ from selenium import webdriver
 from Helper_Class import LoginPage, registerPage,new_user, DashboardPage
 import os 
 
-firefly = os.environ.get("FIREFLY_URL", "http://localhost:8080")
+firefly = os.environ.get("FIREFLY_URL", "http://52.212.42.101:8080")
 class FireflyBudgetTest(unittest.TestCase):
 
     def setUp(self):
-
         self.name = "test_name_" + str(datetime.datetime.now())
-        self.driver = webdriver.Chrome()
+        headless = os.environ.get("HEADLESS", False).lower() == True
+        options = webdriver.ChromeOptions()
+        if headless:
+            options.add_argument('--headless')
+            options.add_argument("--sandbox")
+        self.driver = webdriver.Chrome(options=options)
         self.driver.get(firefly + "/register")
         self.driver.maximize_window()
 
