@@ -1,0 +1,5 @@
+docker compose -f docker-compose.yaml up -d --pull=always  to run the containers
+docker compose -f docker-compose.yaml logs -f  to show the logs
+docker compose -f docker-compose.yaml down to stop the containers
+source "/Users/hamadfyad/Desktop/firefly /.venv/bin/activate" to activate the virtual environment and use pip 
+: ) 

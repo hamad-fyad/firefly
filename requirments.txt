@@ -6,3 +6,5 @@ pytest-rerunfailures
 allure-pytest
 httpx
 pytest-asyncio
+dotenv
+pytest-cov
