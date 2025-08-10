@@ -48,13 +48,13 @@ class LoginPage:
         self.email_field = (By.XPATH, "//input[@placeholder='Email address']")
         self.password_field = (By.XPATH, "//input[@placeholder='Password']")
         self.login_button = (By.XPATH, "//button[normalize-space()='Sign in']")
-        self.skip_button = (By.XPATH, "//a[normalize-space()='Skip']")
+        # self.skip_button = (By.XPATH, "//a[normalize-space()='Skip']")
 
     def login_as_valid_user(self, username, password):
         WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(self.email_field)).send_keys(username)
         self.driver.find_element(*self.password_field).send_keys(password)
         self.driver.find_element(*self.login_button).click()
-        self.driver.find_element(*self.skip_button).click()
+        # self.driver.find_element(*self.skip_button).click()
         return DashboardPage(self.driver)
 
 
@@ -111,6 +111,7 @@ class DashboardPage:
 
 
     def logout(self):
+        self.driver.implicitly_wait(5)
         # Find and click the logout button (update selector as needed)
         logout_button = (By.XPATH, "//a[@class='logout-link']")
         WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(logout_button)).click()

@@ -7,9 +7,9 @@ import random
 def generate_unique_account_name():
     return f"test_account_{datetime.now().strftime('%Y%m%d%H%M%S')}_{random.randint(1000, 9999)}"
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="module") # Create account once for the whole module
 def created_account_id():
-    # Create an account once for the whole module tests
+
     unique_name = generate_unique_account_name()
     payload = {
         "name": unique_name,
