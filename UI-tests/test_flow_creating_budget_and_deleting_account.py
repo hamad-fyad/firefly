@@ -5,6 +5,10 @@ from selenium import webdriver
 from Helper_Class import LoginPage, registerPage,new_user, DashboardPage
 import os 
 import tempfile
+from dotenv import load_dotenv
+headless = str(os.environ.get("HEADLESS", "false")).lower() in ("true", "1")
+if headless == False:
+    load_dotenv()
 firefly = os.environ.get("FIREFLY_URL", "http://localhost:8080")
 class FireflyBudgetTest(unittest.TestCase):
 
@@ -47,3 +51,11 @@ class FireflyBudgetTest(unittest.TestCase):
 
     def tearDown(self):
         self.driver.quit()
+
+        
+if __name__ == "__main__":
+    unittest.main()
+    unittest.main(verbosity=2)
+# This code is a test case for creating a budget and deleting an account in the Firefly application using Selenium WebDriver.
+# It uses the unittest framework to structure the test case, and it includes setup and teardown methods
+# to initialize and clean up the WebDriver instance.        

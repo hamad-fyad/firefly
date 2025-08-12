@@ -5,7 +5,7 @@ from selenium import webdriver
 from Helper_Class import LoginPage, registerPage,new_user, DashboardPage
 import os 
 import tempfile
-firefly = os.environ.get("FIREFLY_URL", "http://52.212.42.101:8080")
+firefly = os.environ.get("FIREFLY_URL", "http://localhost:8080")
 
 class Fireflylogout(unittest.TestCase):
     def setUp(self):

@@ -27,14 +27,14 @@ class registerPage:
 class new_user:
     def __init__(self, driver: webdriver.Chrome):
         self.driver = driver
-        self.driver.implicitly_wait(10)  # Wait for elements to load
+          # Wait for elements to load
         self.bank_name = (By.ID, "ffInput_bank_name")
         self.bank_balance = (By.ID, "bank_balance")
         self.submit = (By.XPATH, "//input[@name='submit']")
         self.skip_button = (By.CSS_SELECTOR, ".introjs-button.introjs-skipbutton")
 
     def enter_as_new_user(self, bankname, bank_balance):
-        self.driver.implicitly_wait(10)  # Wait for elements to load
+          # Wait for elements to load
         WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(self.bank_name)).send_keys(bankname)
         self.driver.find_element(*self.bank_balance).send_keys(bank_balance)
         self.driver.find_element(*self.submit).click()
@@ -95,7 +95,6 @@ class DashboardPage:
     #     )
     #     return DashboardPage(self.driver)
     def delete_account(self, password):
-        self.driver.implicitly_wait(10)
         WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(self.options)).click()
         WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(self.profile_link)).click()
         WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(self.delete_account_link)).click()
@@ -111,7 +110,6 @@ class DashboardPage:
 
 
     def logout(self):
-        self.driver.implicitly_wait(5)
         # Find and click the logout button (update selector as needed)
         logout_button = (By.XPATH, "//a[@class='logout-link']")
         WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(logout_button)).click()
@@ -149,14 +147,11 @@ class BudgetPage:
 
     def create_new_budget(self, name: str, amount: str):
         # Click on "Create a budget"
-        self.driver.implicitly_wait(10)  # Wait for elements to load
         WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(self.create_budget)).click()
-        self.driver.implicitly_wait(10)  # Wait for elements to load
         # Fill in the budget name
         WebDriverWait(self.driver, 10).until(
             EC.presence_of_element_located(self.input_name)
         ).send_keys(name)
-        self.driver.implicitly_wait(10)  # Wait for elements to load
 
         # Open budget type dropdown and select the option
         WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(self.auto_budget_dropdown)).click()
@@ -166,10 +161,10 @@ class BudgetPage:
         WebDriverWait(self.driver, 10).until(
             EC.presence_of_element_located(self.amount_input)
         ).send_keys(amount)
-        self.driver.implicitly_wait(10)  # Wait for elements to load
+          # Wait for elements to load
         # Submit the form
         WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(self.save_button)).click()
-        self.driver.implicitly_wait(10)  # Wait for elements to load
+          # Wait for elements to load
         WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(self.skip_button)).click()
         # Wait for the page to refresh or redirect
         WebDriverWait(self.driver, 10).until(
@@ -177,7 +172,7 @@ class BudgetPage:
             #d.find_elements(By.XPATH, "//body/div[@id='app']/aside[@class='main-sidebar']/section[@class='sidebar']/ul[@class='sidebar-menu tree']/li[1]/a[1]")#TODO need to change this to a more reliable check
             d.find_elements(By.XPATH, "//span[normalize-space()='Dashboard']")
         )
-        self.driver.implicitly_wait(10)  # Wait for elements to load
+          # Wait for elements to load
 
         # Click on Dashboard in sidebar
         WebDriverWait(self.driver, 10).until(

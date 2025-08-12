@@ -1,7 +1,7 @@
 
 # Firefly III Test Plan
 
-## 1. What We Test
+## 1. What I Test
 
 ### API
 - **Account Management:**
@@ -25,7 +25,7 @@
 
 ---
 
-## 2. How We Test (Strategy)
+## 2. How I Test (Strategy)
 
 ### API
 - Use `pytest` with `requests` to send HTTP requests to the Firefly III API
@@ -65,14 +65,15 @@ Firefly III is a web app with a REST API and a modern web UI. API tests ensure b
 - Test user: `hamad.fyad.05@gmail.com` / `Hamadf@0528259919` (for automation only)
 - Bank name: `test_bank`, balance: `1000000`
 - Budget amount: `1000`
-- API token and cron token from `.env`
+- API token, cron token and FIREFLY_BASE_URL from `.env`
+
 
 ---
 
 ## 6. Reporting Results
 - **Local/CI:**
   - API: Pytest output (terminal) 
-  - UI: Pytest output, Allure reports (if enabled)
+  - UI: Pytest output, Allure reports 
   - GitHub Actions: Workflow summary, logs, and artifacts
 - **Manual:**
   - Issues and bugs are reported in the project issue tracker with logs and screenshots as needed
