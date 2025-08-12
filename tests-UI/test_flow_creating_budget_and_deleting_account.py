@@ -2,14 +2,28 @@ import datetime
 import time
 import unittest
 from selenium import webdriver
-from Helper_Class import LoginPage, registerPage,new_user, DashboardPage
-import os 
+from Helper_Class import LoginPage, registerPage, new_user, DashboardPage
+import os
 import tempfile
 from dotenv import load_dotenv
+import requests
+
+def get_firefly_url():
+    remote = "http://52.212.42.101:8080"
+    local = "http://localhost:8080"
+    try:
+        r = requests.get(remote, timeout=2)
+        if r.status_code < 500:
+            return remote
+    except Exception:
+        pass
+    return local
+
 headless = str(os.environ.get("HEADLESS", "false")).lower() in ("true", "1")
-if headless == False:
+if headless == "false":
     load_dotenv()
-firefly = os.environ.get("FIREFLY_URL", "http://localhost:8080")
+firefly = get_firefly_url()
+
 class FireflyBudgetTest(unittest.TestCase):
 
 

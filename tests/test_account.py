@@ -19,7 +19,7 @@ def created_account_id():
     response = requests.post(config.BASE_URL + '/accounts', headers=config.HEADERS, json=payload)
     assert response.status_code == 200, f"Setup failed: status code {response.status_code}"
     account_id = response.json()["data"]["id"]
-    yield account_id
+    yield account_id # when the test is done, this will be cleaned up
 
     # Cleanup: delete the account after tests complete
     requests.delete(f"{config.BASE_URL}/accounts/{account_id}", headers=config.HEADERS)
