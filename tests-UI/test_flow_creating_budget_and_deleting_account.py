@@ -29,6 +29,7 @@ class FireflyBudgetTest(unittest.TestCase):
 
 
     def setUp(self):
+        
         self.name = "test_name_" + str(datetime.datetime.now())
         
         headless = str(os.environ.get("HEADLESS", "false")).lower() in ("true", "1")
@@ -44,8 +45,10 @@ class FireflyBudgetTest(unittest.TestCase):
         options.add_argument(f"--user-data-dir={user_data_dir}")
 
         self.driver = webdriver.Chrome(options=options)
+       
         self.driver.get(firefly + "/register")
         self.driver.maximize_window()
+        self.driver.implicitly_wait(10) 
 
 
     def test_create_budget(self):
@@ -53,7 +56,7 @@ class FireflyBudgetTest(unittest.TestCase):
         # Try to register a new user
         register_page = registerPage(self.driver)
         new_user_obj = register_page.register_new_user("hamad.fyad.05@gmail.com", "Hamadf@0528259919")
-        self.driver.implicitly_wait(5) 
+        
         dashboard = new_user_obj.enter_as_new_user("test_bank", "1000000")
         budget_page = dashboard.go_to_budgets()
         dashboard1 = budget_page.create_new_budget(self.name, "1000")

@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 import requests
 
 load_dotenv()
-def get_firefly_url():
+def get_firefly_url(): # here i check if the ec2 instance is up
     remote = "http://52.212.42.101:8080"
     local = "http://localhost:8080"
     try:
@@ -15,8 +15,8 @@ def get_firefly_url():
     return local
 
 BASE_URL = get_firefly_url() + "/api/v1"
-print(f"Using BASE_URL: {BASE_URL}")
-if "local" in BASE_URL:
+
+if "local" in BASE_URL: # if running locally, use the local API token
     API_TOKEN = os.getenv("API_TESTING_TOKEN2") 
 else:
     API_TOKEN = os.getenv("API_TESTING_TOKEN")

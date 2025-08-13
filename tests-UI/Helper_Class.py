@@ -1,8 +1,12 @@
 
+from time import sleep
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.common.action_chains import ActionChains
+
 
 class registerPage:
     def __init__(self, driver):
@@ -38,7 +42,7 @@ class new_user:
         WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(self.bank_name)).send_keys(bankname)
         self.driver.find_element(*self.bank_balance).send_keys(bank_balance)
         self.driver.find_element(*self.submit).click()
-        WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(self.skip_button)).click()
+        #WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(self.skip_button)).click()
         return DashboardPage(self.driver)
     
 class LoginPage:
@@ -48,13 +52,13 @@ class LoginPage:
         self.email_field = (By.XPATH, "//input[@placeholder='Email address']")
         self.password_field = (By.XPATH, "//input[@placeholder='Password']")
         self.login_button = (By.XPATH, "//button[normalize-space()='Sign in']")
-        # self.skip_button = (By.XPATH, "//a[normalize-space()='Skip']")
+        self.skip_button = (By.XPATH, "//a[normalize-space()='Skip']")
 
     def login_as_valid_user(self, username, password):
         WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(self.email_field)).send_keys(username)
         self.driver.find_element(*self.password_field).send_keys(password)
         self.driver.find_element(*self.login_button).click()
-        # self.driver.find_element(*self.skip_button).click()
+        self.driver.find_element(*self.skip_button).click()
         return DashboardPage(self.driver)
 
 
@@ -73,18 +77,43 @@ class DashboardPage:
 
 
     def go_to_budgets(self):
-        try:
-            WebDriverWait(self.driver, 5).until(
-                EC.element_to_be_clickable(self.skip_button)
-            ).click()
-        except:
-            print("No intro skip button visible at first.")
+        # try:
+        #     # Wait for skip button to appear and click
+        #     skip_btn = WebDriverWait(self.driver, 5).until(
+        #         EC.presence_of_element_located(self.skip_button)
+        #     )
+        #     if skip_btn.is_displayed() and skip_btn.is_enabled():
+        #         self.driver.execute_script("arguments[0].scrollIntoView(true);", skip_btn)
+        #         skip_btn.click()
+        #         print("Intro skip button clicked.")
+        # except Exception:
+        #     print("No intro skip button visible.")
 
-        WebDriverWait(self.driver, 10).until(
+        # Wait for any overlay to disappear
+        # try:
+        #     WebDriverWait(self.driver, 5).until_not(
+        #         EC.presence_of_element_located((By.CLASS_NAME, "introjs-overlay"))
+        #     )
+        # except Exception:
+        #     pass
+
+        # Scroll to budgets link and ensure visible before clicking
+        budgets_link = WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located(self.budgets_link)
+        )
+
+        self.driver.execute_script("arguments[0].scrollIntoView(true);", budgets_link)
+
+        WebDriverWait(self.driver, 5).until(
             EC.element_to_be_clickable(self.budgets_link)
-        ).click()
+        )
+
+        # Final JS click to avoid "click intercepted"
+        self.driver.execute_script("arguments[0].click();", budgets_link)
 
         return BudgetPage(self.driver)
+
+
 
 
     # def go_to_dashboard(self):
@@ -95,13 +124,38 @@ class DashboardPage:
     #     )
     #     return DashboardPage(self.driver)
     def delete_account(self, password):
-        WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(self.options)).click()
-        WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(self.profile_link)).click()
-        WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(self.delete_account_link)).click()
-        WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(self.password)).send_keys(password)
-        WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(self.delete_button)).click()
+        wait = WebDriverWait(self.driver, 15)  # give more time
+
+        # Skip intro if present
+        try:
+            skip_btn = wait.until(EC.element_to_be_clickable(self.skip_button))
+            ActionChains(self.driver).move_to_element(skip_btn).click().perform()
+            print("Intro skip button clicked.")
+            sleep(1)  # allow UI to update after skip
+        except TimeoutException:
+            pass
+
+        # Make sure options menu is clickable
+        opts = wait.until(EC.element_to_be_clickable(self.options))
+        ActionChains(self.driver).move_to_element(opts).click().perform()
+        sleep(0.5)
+
+        # Now click profile link
+        try:
+            prof = wait.until(EC.element_to_be_clickable(self.profile_link))
+            ActionChains(self.driver).move_to_element(prof).click().perform()
+        except TimeoutException:
+            print("Profile link not found! Page may be still loading or selector changed.")
+            raise
+
+        # Click delete account
+        wait.until(EC.element_to_be_clickable(self.delete_account_link)).click()
+        wait.until(EC.element_to_be_clickable(self.password)).send_keys(password)
+        wait.until(EC.element_to_be_clickable(self.delete_button)).click()
+
         print("Account deleted successfully")
         return LoginPage(self.driver)
+
 
 
 
@@ -145,6 +199,17 @@ class BudgetPage:
         self.dashboard_link = (By.XPATH, "//a[.//span[text()='Dashboard']]")
         self.skip_button = (By.CSS_SELECTOR, ".introjs-button.introjs-skipbutton")
 
+    def dismiss_intro_popup(driver, skip_button_locator, timeout=5):
+        """Click the intro/skip pop-up if it appears."""
+        try:
+            skip_btn = WebDriverWait(driver, timeout).until(
+                EC.element_to_be_clickable(skip_button_locator)
+            )
+            skip_btn.click()
+            print("Intro skip button clicked.")
+        except TimeoutException:
+            # Pop-up didn't appear, safe to continue
+            print("No intro pop-up detected.")
     def create_new_budget(self, name: str, amount: str):
         # Click on "Create a budget"
         WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(self.create_budget)).click()
@@ -170,8 +235,7 @@ class BudgetPage:
         WebDriverWait(self.driver, 10).until(
             lambda d:
             #d.find_elements(By.XPATH, "//body/div[@id='app']/aside[@class='main-sidebar']/section[@class='sidebar']/ul[@class='sidebar-menu tree']/li[1]/a[1]")#TODO need to change this to a more reliable check
-            d.find_elements(By.XPATH, "//span[normalize-space()='Dashboard']")
-        )
+            d.find_elements(By.XPATH, "//span[normalize-space()='Dashboard']"))
           # Wait for elements to load
 
         # Click on Dashboard in sidebar
