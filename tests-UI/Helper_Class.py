@@ -31,7 +31,7 @@ class new_user:
         self.bank_name = (By.ID, "ffInput_bank_name")
         self.bank_balance = (By.ID, "bank_balance")
         self.submit = (By.XPATH, "//input[@name='submit']")
-        self.skip_button = (By.CSS_SELECTOR, ".introjs-button.introjs-skipbutton")
+        self.skip_button = (By.XPATH, "//a[normalize-space()='Skip']")
 
     def enter_as_new_user(self, bankname, bank_balance):
           # Wait for elements to load
@@ -69,7 +69,7 @@ class DashboardPage:
         self.delete_account_link = (By.XPATH, "//a[normalize-space()='Delete account']")
         self.password = (By.ID, "password")
         self.delete_button = (By.XPATH, "//button[normalize-space()='DELETE your account']")
-        self.skip_button = (By.CSS_SELECTOR, ".introjs-button.introjs-skipbutton")
+        self.skip_button = (By.XPATH, "//a[normalize-space()='Skip']")
 
 
     def go_to_budgets(self):
@@ -143,7 +143,7 @@ class BudgetPage:
         self.amount_input = (By.ID, "ffInput_auto_budget_amount")
         self.save_button = (By.XPATH, "//button[normalize-space()='Store new budget']")
         self.dashboard_link = (By.XPATH, "//a[.//span[text()='Dashboard']]")
-        self.skip_button = (By.CSS_SELECTOR, ".introjs-button.introjs-skipbutton")
+        self.skip_button = (By.XPATH, "//a[normalize-space()='Skip']")
 
     def create_new_budget(self, name: str, amount: str):
         # Click on "Create a budget"
