@@ -8,7 +8,7 @@
 
 services:
   app:
-    image: fireflyiii/core:latest
+    image: fireflyiii/core:version-6.3.2
     hostname: app
     container_name: firefly_iii_core
     networks:
@@ -33,7 +33,7 @@ services:
       - firefly_iii_db:/var/lib/mysql
 
   importer:
-    image: fireflyiii/data-importer:latest
+    image: fireflyiii/data-importer:version-1.7.10
     hostname: importer
     restart: always
     container_name: firefly_iii_importer

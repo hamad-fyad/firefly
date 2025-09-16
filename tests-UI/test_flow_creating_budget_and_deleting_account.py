@@ -39,7 +39,7 @@ class FireflyBudgetTest(unittest.TestCase):
             options.add_argument('--headless=new')
             options.add_argument('--no-sandbox') # This option is used to run Chrome in headless mode without a sandbox, which is useful for CI environments.
             options.add_argument('--disable-dev-shm-usage') # This option makes Chrome store temporary data on disk instead of shared memory, avoiding crashes in low-/dev/shm environments.
-
+            options.add_argument("--start-maximized")
         # ✅ Unique Chrome user profile
         user_data_dir = tempfile.mkdtemp()
         options.add_argument(f"--user-data-dir={user_data_dir}")
