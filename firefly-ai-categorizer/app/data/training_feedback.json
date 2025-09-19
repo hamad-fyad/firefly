@@ -1,0 +1,16 @@
+[
+  {"desc": "McDonalds", "cat": "Food"},
+  {"desc": "Uber ride", "cat": "Transport"},
+  {"desc": "Shell Gas Station", "cat": "Transport"},
+  {"desc": "Netflix subscription", "cat": "Entertainment"},
+  {"desc": "Spotify", "cat": "Entertainment"},
+  {"desc": "Amazon purchase", "cat": "Shopping"},
+  {"desc": "Walmart groceries", "cat": "Food"},
+  {"desc": "Airbnb booking", "cat": "Travel"},
+  {"desc": "Flight ticket", "cat": "Travel"},
+  {"desc": "Gym membership", "cat": "Health"},
+  {"desc": "Pharmacy purchase", "cat": "Health"},
+  {"desc": "Electricity bill", "cat": "Utilities"},
+  {"desc": "Water bill", "cat": "Utilities"},
+  {"desc": "Internet payment", "cat": "Utilities"}
+]
