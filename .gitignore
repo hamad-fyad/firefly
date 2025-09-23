@@ -20,3 +20,21 @@ allure-report
 *.iml
 *.swp
 .json
+
+# Temporary and cache files
+*.tmp
+*.cache
+.DS_Store
+
+# Old/unused files (cleaned up)
+command.txt
+useful-links.txt
+test-plan.md
+fix-and-restart.sh
+diagnose-error.sh
+firefly_AI_intgration_plan.md
+
+# Deprecated directories
+
+scripts/
+UI-tests/

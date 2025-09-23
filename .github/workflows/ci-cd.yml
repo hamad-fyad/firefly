@@ -1,0 +1,426 @@
+name: 🚀 CI/CD - Build, Deploy & Test Firefly AI Stack
+
+on:
+  push:
+    branches: [ main, develop, intgrate_with_chatgpt ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Force deployment to EC2'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  DOCKER_REGISTRY: docker.io
+  DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+  DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+  AWS_EC2_HOST: ${{ secrets.AWS_EC2_HOST }}
+  AWS_EC2_USER: ${{ secrets.AWS_EC2_USER }}
+  AWS_EC2_KEY: ${{ secrets.AWS_EC2_PRIVATE_KEY }}
+  FIREFLY_BASE_URL: ${{ secrets.FIREFLY_BASE_URL }}
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+jobs:
+  # ===============================
+  # BUILD & PUSH DOCKER IMAGES
+  # ===============================
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      ai-image-tag: ${{ steps.meta-ai.outputs.tags }}
+      webhook-image-tag: ${{ steps.meta-webhook.outputs.tags }}
+      version: ${{ steps.meta.outputs.version }}
+    
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🐋 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔐 Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_PASSWORD }}
+
+      - name: 📝 Extract Metadata
+        id: meta
+        run: |
+          VERSION=v$(date +%Y%m%d)-${GITHUB_SHA::8}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "timestamp=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+
+      # Build AI Categorizer Service
+      - name: 🤖 Build AI Categorizer Metadata
+        id: meta-ai
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_USERNAME }}/firefly-ai-categorizer
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.meta.outputs.version }}
+
+      - name: 🔨 Build & Push AI Categorizer
+        uses: docker/build-push-action@v5
+        with:
+          context: ./firefly-ai-categorizer
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta-ai.outputs.tags }}
+          labels: ${{ steps.meta-ai.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            BUILD_DATE=${{ steps.meta.outputs.timestamp }}
+
+      # Build Webhook Service
+      - name: 🪝 Build Webhook Metadata
+        id: meta-webhook
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_USERNAME }}/firefly-webhook-service
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.meta.outputs.version }}
+
+      - name: 🔨 Build & Push Webhook Service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./webhook_service
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta-webhook.outputs.tags }}
+          labels: ${{ steps.meta-webhook.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            BUILD_DATE=${{ steps.meta.outputs.timestamp }}
+
+      - name: 🔒 Security Scan Images
+        run: |
+          echo "🔍 Running security scans..."
+          
+          # Install Trivy
+          sudo apt-get update
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install -y trivy
+          
+          # Scan AI service
+          trivy image --exit-code 0 --severity HIGH,CRITICAL ${{ env.DOCKER_USERNAME }}/firefly-ai-categorizer:${{ steps.meta.outputs.version }}
+          
+          # Scan Webhook service  
+          trivy image --exit-code 0 --severity HIGH,CRITICAL ${{ env.DOCKER_USERNAME }}/firefly-webhook-service:${{ steps.meta.outputs.version }}
+
+  # ===============================
+  # DEPLOY TO EC2
+  # ===============================
+  deploy-to-ec2:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/intgrate_with_chatgpt' || github.event.inputs.force_deploy == 'true'
+    
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ env.AWS_EC2_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ env.AWS_EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: 📋 Prepare Deployment Files
+        run: |
+          # Create deployment directory
+          mkdir -p deployment
+          
+          # Copy necessary files
+          cp docker-compose.yaml deployment/
+          cp .db.env deployment/
+          cp configure-firefly.sh deployment/
+          cp ec2-setup.sh deployment/
+          cp ec2-debug.sh deployment/
+          
+          # Create environment file for EC2
+          cat > deployment/.env << EOF
+          # Firefly III Configuration for EC2
+          APP_ENV=production
+          APP_DEBUG=false
+          SITE_OWNER=admin@firefly.ec2
+          
+          # OpenAI API Key
+          OPENAI_API_KEY=${{ env.OPENAI_API_KEY }}
+          
+          # Database Configuration
+          DB_CONNECTION=mysql
+          DB_HOST=db
+          DB_PORT=3306
+          DB_DATABASE=firefly
+          DB_USERNAME=admin
+          DB_PASSWORD=admin
+          
+          # Application URLs for EC2
+          APP_URL=${{ env.FIREFLY_BASE_URL }}
+          FIREFLY_URL=${{ env.FIREFLY_BASE_URL }}
+          
+          # API Tokens (will be generated automatically)
+          FIREFLY_TOKEN=\${FIREFLY_TOKEN}
+          FIREFLY_TOKEN2=\${FIREFLY_TOKEN2}
+          API_TESTING_TOKEN=\${API_TESTING_TOKEN}
+          API_TESTING_TOKEN2=\${API_TESTING_TOKEN2}
+          
+          # Encryption key (generate new one for EC2)
+          APP_KEY=base64:$(openssl rand -base64 32)
+          
+          # Time zone
+          TZ=UTC
+          
+          # Security settings
+          TRUSTED_PROXIES=**
+          
+          # Log configuration
+          LOG_CHANNEL=stack
+          APP_LOG_LEVEL=info
+          
+          # Disable user registration initially (will be enabled by config script)
+          DISABLE_FRAME_HEADER=false
+          DISABLE_CSP_HEADER=false
+          
+          # Webhooks
+          ALLOW_WEBHOOKS=true
+          
+          # Static cron token
+          STATIC_CRON_TOKEN=$(openssl rand -hex 16)
+          EOF
+          
+          # Update docker-compose.yaml with new image tags
+          sed -i "s|fireflyiii/ai-categorizer:.*|${{ env.DOCKER_USERNAME }}/firefly-ai-categorizer:${{ needs.build-and-push.outputs.version }}|g" deployment/docker-compose.yaml
+          sed -i "s|fireflyiii/webhook-service:.*|${{ env.DOCKER_USERNAME }}/firefly-webhook-service:${{ needs.build-and-push.outputs.version }}|g" deployment/docker-compose.yaml
+
+      - name: 🚀 Deploy to EC2
+        run: |
+          echo "🚀 Starting deployment to EC2..."
+          
+          # Copy files to EC2
+          scp -i ~/.ssh/id_rsa -r deployment/* ${{ env.AWS_EC2_USER }}@${{ env.AWS_EC2_HOST }}:~/firefly/
+          
+          # Execute deployment on EC2
+          ssh -i ~/.ssh/id_rsa ${{ env.AWS_EC2_USER }}@${{ env.AWS_EC2_HOST }} << 'EOF'
+            set -e
+            cd ~/firefly
+            
+            echo "📦 Updating system and installing dependencies..."
+            chmod +x ec2-setup.sh
+            ./ec2-setup.sh
+            
+            echo "🔄 Pulling latest images..."
+            docker compose pull
+            
+            echo "⏹️ Stopping existing services..."
+            docker compose down
+            
+            echo "🗑️ Cleaning up old containers and images..."
+            docker system prune -f
+            
+            echo "🚀 Starting updated services..."
+            docker compose up -d
+            
+            echo "⏳ Waiting for services to be ready..."
+            sleep 30
+            
+            echo "🔧 Configuring Firefly III..."
+            chmod +x configure-firefly.sh
+            ./configure-firefly.sh
+            
+            echo "✅ Deployment completed successfully!"
+          EOF
+
+      - name: 📊 Deployment Summary
+        run: |
+          echo "## 🎉 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Version | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|---------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| AI Categorizer | \`${{ needs.build-and-push.outputs.version }}\` | ✅ Deployed |" >> $GITHUB_STEP_SUMMARY
+          echo "| Webhook Service | \`${{ needs.build-and-push.outputs.version }}\` | ✅ Deployed |" >> $GITHUB_STEP_SUMMARY
+          echo "| Firefly III Core | \`6.3.2\` | ✅ Running |" >> $GITHUB_STEP_SUMMARY
+          echo "| Database | \`MariaDB Noble\` | ✅ Running |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🌐 **Firefly III URL**: ${{ env.FIREFLY_BASE_URL }}" >> $GITHUB_STEP_SUMMARY
+          echo "📅 **Deployed**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  # ===============================
+  # VALIDATE DEPLOYMENT
+  # ===============================
+  validate-deployment:
+    runs-on: ubuntu-latest
+    needs: [build-and-push, deploy-to-ec2]
+    if: always() && needs.deploy-to-ec2.result == 'success'
+    
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: 📦 Install Dependencies
+        run: |
+          pip install requests pytest python-dotenv
+
+      - name: 🧪 Run Deployment Tests
+        env:
+          FIREFLY_BASE_URL: ${{ env.FIREFLY_BASE_URL }}
+        run: |
+          cat > test_deployment.py << 'EOF'
+          import requests
+          import time
+          import os
+          import sys
+          
+          def test_service_health(url, service_name, timeout=30):
+              """Test if a service is healthy"""
+              print(f"🔍 Testing {service_name} at {url}")
+              
+              for attempt in range(timeout):
+                  try:
+                      response = requests.get(url, timeout=5)
+                      if response.status_code < 500:
+                          print(f"✅ {service_name}: HTTP {response.status_code}")
+                          return True
+                  except Exception as e:
+                      print(f"⏳ Attempt {attempt + 1}/{timeout}: {e}")
+                  
+                  time.sleep(2)
+              
+              print(f"❌ {service_name}: Failed to respond")
+              return False
+          
+          def test_api_endpoint(base_url, endpoint, service_name):
+              """Test API endpoints"""
+              try:
+                  url = f"{base_url}{endpoint}"
+                  response = requests.get(url, timeout=10)
+                  
+                  if response.status_code == 200:
+                      print(f"✅ {service_name} API: {endpoint} responded correctly")
+                      return True
+                  else:
+                      print(f"⚠️ {service_name} API: {endpoint} returned {response.status_code}")
+                      return False
+                      
+              except Exception as e:
+                  print(f"❌ {service_name} API: {endpoint} failed - {e}")
+                  return False
+          
+          def main():
+              base_url = os.getenv('FIREFLY_BASE_URL', 'http://localhost:8080')
+              
+              print("🧪 Starting deployment validation tests...")
+              print(f"🎯 Target: {base_url}")
+              
+              tests_passed = 0
+              total_tests = 0
+              
+              # Test Firefly III Core
+              total_tests += 1
+              if test_service_health(base_url, "Firefly III Core"):
+                  tests_passed += 1
+              
+              # Test AI Categorizer Service
+              total_tests += 1
+              ai_url = base_url.replace(':8080', ':8082') + '/health'
+              if test_service_health(ai_url, "AI Categorizer"):
+                  tests_passed += 1
+              
+              # Test Webhook Service
+              total_tests += 1
+              webhook_url = base_url.replace(':8080', ':8001') + '/health'
+              if test_service_health(webhook_url, "Webhook Service"):
+                  tests_passed += 1
+              
+              # Test Data Importer
+              total_tests += 1
+              importer_url = base_url.replace(':8080', ':81')
+              if test_service_health(importer_url, "Data Importer"):
+                  tests_passed += 1
+              
+              # Test API endpoints
+              total_tests += 1
+              if test_api_endpoint(base_url, '/api/v1/about', "Firefly III"):
+                  tests_passed += 1
+              
+              # Results
+              print(f"\n📊 Test Results: {tests_passed}/{total_tests} passed")
+              
+              if tests_passed == total_tests:
+                  print("🎉 All deployment tests passed!")
+                  return 0
+              else:
+                  print("❌ Some deployment tests failed!")
+                  return 1
+          
+          if __name__ == "__main__":
+              sys.exit(main())
+          EOF
+          
+          python test_deployment.py
+
+      - name: 🔧 Setup SSH for Debug
+        if: failure()
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ env.AWS_EC2_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ env.AWS_EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: 🐛 Debug Failed Deployment
+        if: failure()
+        run: |
+          echo "🐛 Running debug script on EC2..."
+          ssh -i ~/.ssh/id_rsa ${{ env.AWS_EC2_USER }}@${{ env.AWS_EC2_HOST }} << 'EOF'
+            cd ~/firefly
+            chmod +x ec2-debug.sh
+            ./ec2-debug.sh
+          EOF
+
+  # ===============================
+  # NOTIFY RESULTS
+  # ===============================
+  notify:
+    runs-on: ubuntu-latest
+    needs: [build-and-push, deploy-to-ec2, validate-deployment]
+    if: always()
+    
+    steps:
+      - name: 📢 Deployment Notification
+        run: |
+          if [ "${{ needs.validate-deployment.result }}" == "success" ]; then
+            echo "🎉 **DEPLOYMENT SUCCESS** 🎉"
+            echo ""
+            echo "✅ Docker images built and pushed"
+            echo "✅ Services deployed to EC2"
+            echo "✅ All validation tests passed"
+            echo ""
+            echo "🌐 Firefly III is ready at: ${{ env.FIREFLY_BASE_URL }}"
+          else
+            echo "❌ **DEPLOYMENT FAILED** ❌"
+            echo ""
+            echo "Please check the logs and debug output above."
+          fi
