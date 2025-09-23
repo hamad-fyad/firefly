@@ -310,7 +310,8 @@ jobs:
   load-tests:
     name: Load & Performance Testing
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'load')
+    # Run load tests automatically, but skip heavy load testing unless manually triggered
+    if: ${{ !cancelled() }}
 
     steps:
       - name: Checkout code
@@ -395,7 +396,14 @@ jobs:
           API_TESTING_TOKEN: ${{ secrets.API_TESTING_TOKEN }}
         run: |
           cd load-tests
-          locust -f firefly_load_test.py --headless --users 10 --spawn-rate 2 --run-time 60s --host "${{ env.FIREFLY_URL }}" --html load-test-report.html
+          # Light load test for automatic runs, heavier for manual triggers
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.test_type }}" == "load" ]]; then
+            echo "🔥 Running full load test (manual trigger)"
+            locust -f firefly_load_test.py --headless --users 20 --spawn-rate 5 --run-time 120s --host "${{ env.FIREFLY_URL }}" --html load-test-report.html
+          else
+            echo "⚡ Running light load test (automatic)"
+            locust -f firefly_load_test.py --headless --users 5 --spawn-rate 1 --run-time 30s --host "${{ env.FIREFLY_URL }}" --html load-test-report.html
+          fi
 
       - name: Simulate Load Tests (if Firefly unavailable)
         if: steps.load_test_check.outputs.available == 'false'
@@ -424,10 +432,17 @@ jobs:
           echo "Generated: $(date)" >> load-tests/load-summary.md
           echo "" >> load-tests/load-summary.md
           echo "## Test Configuration:" >> load-tests/load-summary.md
-          echo "- Users: 10 concurrent" >> load-tests/load-summary.md
-          echo "- Duration: 60 seconds" >> load-tests/load-summary.md
-          echo "- Target: ${{ env.FIREFLY_URL }}" >> load-tests/load-summary.md
-          echo "- Endpoints tested: /about, /accounts, /transactions" >> load-tests/load-summary.md
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.test_type }}" == "load" ]]; then
+            echo "- **Mode**: Full load test (manual trigger)" >> load-tests/load-summary.md
+            echo "- **Users**: 20 concurrent" >> load-tests/load-summary.md
+            echo "- **Duration**: 120 seconds" >> load-tests/load-summary.md
+          else
+            echo "- **Mode**: Light load test (automatic)" >> load-tests/load-summary.md
+            echo "- **Users**: 5 concurrent" >> load-tests/load-summary.md
+            echo "- **Duration**: 30 seconds" >> load-tests/load-summary.md
+          fi
+          echo "- **Target**: ${{ env.FIREFLY_URL }}" >> load-tests/load-summary.md
+          echo "- **Endpoints tested**: /about, /accounts, /transactions" >> load-tests/load-summary.md
 
       - name: Upload Load Test Reports
         uses: actions/upload-artifact@v4
@@ -496,7 +511,7 @@ jobs:
   allure-report:
     name: Generate Test Reports
     runs-on: ubuntu-latest
-    needs: [unit-tests, api-tests, code-quality, security-tests, dependency-tests]
+    needs: [unit-tests, api-tests, code-quality, security-tests, dependency-tests, load-tests]
     if: always()
     permissions:
       contents: read
@@ -513,6 +528,14 @@ jobs:
           name: allure-history-firefly
           path: allure-results/history
         continue-on-error: true
+
+      - name: Create initial Allure history if not exists
+        run: |
+          mkdir -p allure-results/history
+          if [ ! -f allure-results/history/history.json ]; then
+            echo "📁 Creating initial Allure history directory"
+            echo '{"statistic": {"total": 0, "passed": 0, "failed": 0, "broken": 0, "skipped": 0}}' > allure-results/history/history.json
+          fi
 
       - name: Download all Allure results
         uses: actions/download-artifact@v4
@@ -609,7 +632,7 @@ jobs:
           - **Code Analysis**: Pylint
           
           ### ⚡ Performance & Load Testing
-          - **Load Testing**: Locust (10 concurrent users, 60s)
+          - **Load Testing**: Locust (5 users/30s automatic, 20 users/120s manual)
           - **Benchmark**: Unit test performance measurement
           - **Endpoints**: /about, /accounts, /transactions
           
@@ -661,7 +684,7 @@ jobs:
             testSummary += "🔌 **API Tests**: Firefly III Integration (depends on remote instance)\n";
             testSummary += "🛡️ **Security Tests**: Bandit, Safety, Semgrep, Secrets Detection\n";
             testSummary += "📊 **Code Quality**: Black, Flake8, MyPy, Pylint\n";
-            testSummary += "⚡ **Load Tests**: Locust performance testing (manual trigger)\n";
+            testSummary += "⚡ **Load Tests**: Locust performance testing (automatic light tests)\n";
             testSummary += "📦 **Dependencies**: Vulnerability audit, license check\n\n";
             
             testSummary += "### Test Coverage:\n";
