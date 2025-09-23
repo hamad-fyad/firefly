@@ -32,6 +32,11 @@ on:
           - staging
           - production
 
+# Prevent concurrent GitHub Pages deployments
+concurrency:
+  group: pages-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   FIREFLY_BASE_URL: http://52.212.42.101:8080/api/v1
   FIREFLY_URL: http://52.212.42.101:8080
@@ -658,14 +663,76 @@ jobs:
         uses: simple-elf/allure-report-action@master
         with:
           allure_results: allure-results
-          allure_report: allure-report-firefly-iii
+          allure_report: allure-report-firefly
           keep_reports: 3
 
-      - name: Upload Allure Report
+      - name: Create GitHub Pages Index
+        run: |
+          mkdir -p pages-content/test-reports
+          cp -r allure-report-firefly/* pages-content/test-reports/
+          
+          # Create a main index page
+          cat > pages-content/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Firefly III Test Reports</title>
+              <style>
+                  body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+                  .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                  h1 { color: #333; text-align: center; margin-bottom: 30px; }
+                  .report-link { display: block; padding: 15px; margin: 10px 0; background: #007bff; color: white; text-decoration: none; border-radius: 5px; text-align: center; transition: background 0.3s; }
+                  .report-link:hover { background: #0056b3; }
+                  .info { background: #e9ecef; padding: 15px; border-radius: 5px; margin: 20px 0; }
+                  .timestamp { text-align: center; color: #666; margin-top: 20px; }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <h1>🧪 Firefly III Test Reports</h1>
+                  
+                  <div class="info">
+                      <strong>Test Suite Coverage:</strong>
+                      <ul>
+                          <li>✅ Unit Tests (AI Categorizer & Webhook Service)</li>
+                          <li>🔌 API Integration Tests</li>
+                          <li>🛡️ Security Tests (Bandit, Safety, Semgrep)</li>
+                          <li>📊 Code Quality (Black, Flake8, MyPy, Pylint)</li>
+                          <li>⚡ Load & Performance Tests</li>
+                          <li>📦 Dependency Analysis</li>
+                      </ul>
+                  </div>
+                  
+                  <a href="test-reports/" class="report-link">
+                      📊 View Latest Test Report (Allure)
+                  </a>
+                  
+                  <div class="timestamp">
+                      Last updated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")<br>
+                      GitHub Run: #${{ github.run_id }}
+                  </div>
+              </div>
+          </body>
+          </html>
+          EOF
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        if: always()
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: pages-content
+          publish_branch: gh-pages
+          keep_files: false
+          commit_message: "📊 Update test reports - Run #${{ github.run_id }}"
+
+      - name: Upload Allure Report (Backup)
         uses: actions/upload-artifact@v4
         with:
-          name: allure-report-firefly-iii-${{ github.run_id }}
-          path: allure-report-firefly-iii/
+          name: allure-report-firefly-${{ github.run_id }}
+          path: allure-report-firefly/
           retention-days: 30
 
       - name: Upload updated Allure history
@@ -687,7 +754,8 @@ jobs:
               
               // Check if allure-results directory exists and has test results
               let testSummary = "🧪 **Firefly III Test Results**\n\n";
-              testSummary += `📊 **Test Report**: Available in workflow artifacts (allure-report-firefly-${{ github.run_id }})\n\n`;
+              testSummary += `📊 **Test Report**: [View on GitHub Pages](https://hamad-fyad.github.io/firefly/test-reports/)\n`;
+              testSummary += `📋 **Backup Report**: Available in workflow artifacts (allure-report-firefly-${{ github.run_id }})\n\n`;
               
               // Add test type information
               testSummary += "### Tests Executed:\n";
