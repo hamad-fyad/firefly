@@ -532,9 +532,6 @@ jobs:
       issues: write
       pull-requests: write
 
-    environment:
-      name: github-pages
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -737,20 +734,23 @@ jobs:
           path: allure-report-firefly/
           retention-days: 30
 
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v4
-
-      - name: Upload Pages Artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: pages-content
-          name: github-pages-${{ github.run_id }}
-
       - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+        uses: peaceiris/actions-gh-pages@v4
+        if: always()
         with:
-          artifact_name: github-pages-${{ github.run_id }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: pages-content
+          publish_branch: gh-pages
+          keep_files: false
+          force_orphan: true
+          commit_message: "📊 Update test reports - Run #${{ github.run_id }}"
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Get Pages URL
+        id: deployment
+        run: |
+          echo "page_url=https://hamad-fyad.github.io/firefly/" >> $GITHUB_OUTPUT
 
       - name: Comment Test Results on PR
         if: github.event_name == 'pull_request'
