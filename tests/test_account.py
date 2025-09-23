@@ -4,9 +4,14 @@ import config
 from datetime import datetime
 import random
 
+@pytest.mark.api
+@pytest.mark.requires_firefly
+@pytest.mark.business_workflow
 def generate_unique_account_name():
     return f"test_account_{datetime.now().strftime('%Y%m%d%H%M%S')}_{random.randint(1000, 9999)}"
 
+@pytest.mark.api
+@pytest.mark.requires_firefly
 @pytest.fixture(scope="module") # Create account once for the whole module
 def created_account_id():
 
@@ -25,6 +30,10 @@ def created_account_id():
     requests.delete(f"{config.BASE_URL}/accounts/{account_id}", headers=config.HEADERS)
 
 
+@pytest.mark.api
+@pytest.mark.requires_firefly
+@pytest.mark.business_workflow
+@pytest.mark.github_actions
 def test_post_account():
     unique_name = generate_unique_account_name()
     payload = {

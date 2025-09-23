@@ -59,6 +59,11 @@ services:
     restart: unless-stopped
     environment:
       FIREFLY_TOKEN: ${FIREFLY_TOKEN}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      DATABASE_URL: postgresql://ai_user:ai_password@ai-db:5432/ai_metrics
+    depends_on:
+      ai-db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
       interval: 30s
@@ -68,8 +73,30 @@ services:
     volumes:
       - ai_service_data:/app/data
       - ai_service_logs:/app/logs
+    ports:
+      - "8082:8000"  # Expose AI service for metrics dashboard
     expose:
       - "8000"
+    networks:
+      - firefly_iii
+
+  ai-db:
+    image: postgres:15-alpine
+    container_name: firefly_iii_ai_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ai_metrics
+      POSTGRES_USER: ai_user
+      POSTGRES_PASSWORD: ai_password
+    volumes:
+      - ai_db_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"  # Avoid conflict with main DB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_user -d ai_metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
       - firefly_iii
 
@@ -106,6 +133,7 @@ volumes:
    ai_service_data:
    ai_service_logs:
    webhook_service_logs:
+   ai_db_data:
 
 networks:
   firefly_iii:

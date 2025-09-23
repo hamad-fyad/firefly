@@ -1,9 +1,10 @@
 fastapi
 uvicorn
 httpx
-scikit-learn
-numpy
-pandas
-joblib
+openai
 python-dotenv
 requests
+sqlalchemy
+psycopg2-binary
+boto3
+asyncpg

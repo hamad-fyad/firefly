@@ -1,0 +1,90 @@
+# Bandit Security Configuration
+# Configuration file for Bandit security linter
+
+[bandit]
+# Exclude paths from scanning
+exclude_dirs = [
+    ".git",
+    "__pycache__",
+    ".pytest_cache",
+    "htmlcov",
+    "allure-results"
+]
+
+# Security tests to skip (with justification)
+skips = [
+    "B101",  # Test for use of assert - common in test files
+]
+
+# Security tests to include
+tests = [
+    "B102",  # Test for exec used
+    "B103",  # Test for set bad file permissions
+    "B104",  # Test for binding to all interfaces
+    "B105",  # Test for hardcoded password strings
+    "B106",  # Test for hardcoded password funcarg
+    "B107",  # Test for hardcoded password default
+    "B108",  # Test for insecure temp file
+    "B110",  # Test for a pass in the except block
+    "B112",  # Test for a continue in the except block
+    "B201",  # Test for use of flask app with debug=True
+    "B301",  # Test for pickle usage
+    "B302",  # Test for marshal usage
+    "B303",  # Test for MD5 usage
+    "B304",  # Test for insecure ciphers
+    "B305",  # Test for cipher modes
+    "B306",  # Test for mktemp usage
+    "B307",  # Test for eval usage
+    "B308",  # Test for mark_safe usage
+    "B309",  # Test for httpsconnection usage
+    "B310",  # Test for urllib urlopen
+    "B311",  # Test for random usage
+    "B312",  # Test for telnetlib usage
+    "B313",  # Test for xml usage
+    "B314",  # Test for xml usage
+    "B315",  # Test for xml usage
+    "B316",  # Test for xml usage
+    "B317",  # Test for xml usage
+    "B318",  # Test for xml usage
+    "B319",  # Test for xml usage
+    "B320",  # Test for xml usage
+    "B321",  # Test for ftplib usage
+    "B322",  # Test for input usage
+    "B323",  # Test for unverified context
+    "B324",  # Test for hashlib usage
+    "B325",  # Test for tempnam usage
+    "B401",  # Test for import of telnetlib
+    "B402",  # Test for import of ftplib
+    "B403",  # Test for import of pickle
+    "B404",  # Test for import of subprocess
+    "B405",  # Test for import of xml libs
+    "B406",  # Test for import of xml libs
+    "B407",  # Test for import of xml libs
+    "B408",  # Test for import of xml libs
+    "B409",  # Test for import of xml libs
+    "B410",  # Test for import of xml libs
+    "B411",  # Test for import of xml libs
+    "B412",  # Test for import of xml libs
+    "B413",  # Test for import of pycrypto
+    "B501",  # Test for request with verify disabled
+    "B502",  # Test for ssl with bad version
+    "B503",  # Test for ssl with bad defaults
+    "B504",  # Test for ssl with no version
+    "B505",  # Test for weak cryptographic key
+    "B506",  # Test for yaml load
+    "B507",  # Test for ssh exec
+    "B601",  # Test for shell injection
+    "B602",  # Test for subprocess
+    "B603",  # Test for subprocess without shell
+    "B604",  # Test for any function with shell=True
+    "B605",  # Test for start_process_with_a_shell
+    "B606",  # Test for start_process_with_no_shell
+    "B607",  # Test for start_process_with_partial_path
+    "B608",  # Test for hardcoded sql expressions
+    "B609",  # Test for wildcard injection
+    "B610",  # Test for django sql injection
+    "B611",  # Test for django sql injection
+    "B701",  # Test for jinja2 autoescape
+    "B702",  # Test for use of mako templates
+    "B703"   # Test for django mark safe
+]
