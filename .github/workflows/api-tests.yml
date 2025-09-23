@@ -519,16 +519,14 @@ jobs:
           name: dependency-reports-${{ github.run_id }}
           path: dependency-reports/
           retention-days: 30
-          
+
   allure-report:
-    name: Firefly III Test Suite - Generate Test Reports
+    name: Generate Test Reports and Deploy to GitHub Pages
     runs-on: ubuntu-latest
     needs: [unit-tests, api-tests, code-quality, security-tests, dependency-tests, load-tests]
     if: always()
-    environment:
-      name: github-pages
     permissions:
-      contents: read
+      contents: write
       pages: write
       id-token: write
       issues: write
@@ -537,6 +535,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download previous Allure history
         uses: actions/download-artifact@v4
@@ -545,39 +545,14 @@ jobs:
           path: allure-results/history
         continue-on-error: true
 
-      - name: Create initial Allure history if not exists
-        run: |
-          mkdir -p allure-results/history
-          if [ ! -f allure-results/history/history.json ]; then
-            echo '{"statistic": {"total": 0, "passed": 0, "failed": 0, "broken": 0, "skipped": 0}}' > allure-results/history/history.json
-          fi
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: |
-            allure-results-*-${{ github.run_id }}
-            code-quality-report-${{ github.run_id }}
-            security-reports-${{ github.run_id }}
-            load-test-reports-${{ github.run_id }}
-            dependency-reports-${{ github.run_id }}
-          merge-multiple: true
-          path: reports-downloaded
-
-      - name: Merge Allure results
+      - name: Merge Allure Results
         run: |
           mkdir -p allure-results
-          cp -r reports-downloaded/* allure-results/ 2>/dev/null || true
-          cat > allure-results/environment.properties << EOF
-          Test.Suite=Firefly III Test Suite
-          Environment=${{ github.event.inputs.environment || 'staging' }}
-          Python.Version=3.11
-          GitHub.Run=${{ github.run_id }}
-          GitHub.Workflow=${{ github.workflow }}
-          Firefly.URL=${{ env.FIREFLY_URL }}
-          Test.Types=Unit, API, Security, Load, Quality, Dependencies
-          Timestamp=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          EOF
+          for dir in allure-results-downloaded/*/; do
+            if [ -d "$dir" ]; then
+              cp -r "$dir"* allure-results/ 2>/dev/null || true
+            fi
+          done
 
       - name: Generate Allure Report
         uses: simple-elf/allure-report-action@master
@@ -586,62 +561,19 @@ jobs:
           allure_report: allure-report-firefly
           keep_reports: 3
 
-      - name: Create GitHub Pages Index
+      - name: Prepare Pages Deployment
         run: |
           mkdir -p pages-content/test-reports
           cp -r allure-report-firefly/* pages-content/test-reports/
-          cat > pages-content/index.html << 'EOF'
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-              <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>Firefly III Test Reports</title>
-              <style>
-                  body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-                  .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-                  h1 { color: #333; text-align: center; margin-bottom: 30px; }
-                  .report-link { display: block; padding: 15px; margin: 10px 0; background: #007bff; color: white; text-decoration: none; border-radius: 5px; text-align: center; transition: background 0.3s; }
-                  .report-link:hover { background: #0056b3; }
-                  .info { background: #e9ecef; padding: 15px; border-radius: 5px; margin: 20px 0; }
-                  .timestamp { text-align: center; color: #666; margin-top: 20px; }
-              </style>
-          </head>
-          <body>
-              <div class="container">
-                  <h1>🧪 Firefly III Test Reports</h1>
-                  <div class="info">
-                      <strong>Test Suite Coverage:</strong>
-                      <ul>
-                          <li>✅ Unit Tests (AI Categorizer & Webhook Service)</li>
-                          <li>🔌 API Integration Tests</li>
-                          <li>🛡️ Security Tests</li>
-                          <li>📊 Code Quality</li>
-                          <li>⚡ Load & Performance Tests</li>
-                          <li>📦 Dependency Analysis</li>
-                      </ul>
-                  </div>
-                  <a href="test-reports/" class="report-link">📊 View Latest Test Report</a>
-                  <div class="timestamp">
-                      Last updated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")<br>
-                      GitHub Run: #${{ github.run_id }}
-                  </div>
-              </div>
-          </body>
-          </html>
-          EOF
+          echo "<meta http-equiv='refresh' content='0;url=test-reports/index.html'>" > pages-content/index.html
 
-      - name: Setup Pages
+      - name: Configure GitHub Pages
         uses: actions/configure-pages@v4
-        if: always()
 
-      - name: Upload to GitHub Pages
+      - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
-        if: always()
         with:
           path: pages-content
 
       - name: Deploy to GitHub Pages
-        id: deployment
         uses: actions/deploy-pages@v4
-        if: always()
