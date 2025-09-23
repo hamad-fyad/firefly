@@ -519,15 +519,14 @@ jobs:
           name: dependency-reports-${{ github.run_id }}
           path: dependency-reports/
           retention-days: 30
-
+          
   allure-report:
-    name: Generate Test Reports
+    name: Firefly III Test Suite - Generate Test Reports
     runs-on: ubuntu-latest
     needs: [unit-tests, api-tests, code-quality, security-tests, dependency-tests, load-tests]
     if: always()
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     permissions:
       contents: read
       pages: write
@@ -550,116 +549,34 @@ jobs:
         run: |
           mkdir -p allure-results/history
           if [ ! -f allure-results/history/history.json ]; then
-            echo "📁 Creating initial Allure history directory"
             echo '{"statistic": {"total": 0, "passed": 0, "failed": 0, "broken": 0, "skipped": 0}}' > allure-results/history/history.json
           fi
 
-      - name: Download all Allure results
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: allure-results-*-${{ github.run_id }}
-          path: allure-results-downloaded
-          merge-multiple: false
-
-      - name: Download Quality Reports
-        uses: actions/download-artifact@v4
-        with:
-          pattern: code-quality-report-${{ github.run_id }}
-          path: quality-reports-downloaded
-        continue-on-error: true
-
-      - name: Download Security Reports
-        uses: actions/download-artifact@v4
-        with:
-          pattern: security-reports-${{ github.run_id }}
-          path: security-reports-downloaded
-        continue-on-error: true
-
-      - name: Download Load Test Reports
-        uses: actions/download-artifact@v4
-        with:
-          pattern: load-test-reports-${{ github.run_id }}
-          path: load-reports-downloaded
-        continue-on-error: true
-
-      - name: Download Dependency Reports
-        uses: actions/download-artifact@v4
-        with:
-          pattern: dependency-reports-${{ github.run_id }}
-          path: dependency-reports-downloaded
-        continue-on-error: true
+          pattern: |
+            allure-results-*-${{ github.run_id }}
+            code-quality-report-${{ github.run_id }}
+            security-reports-${{ github.run_id }}
+            load-test-reports-${{ github.run_id }}
+            dependency-reports-${{ github.run_id }}
+          merge-multiple: true
+          path: reports-downloaded
 
       - name: Merge Allure results
         run: |
           mkdir -p allure-results
-          for dir in allure-results-downloaded/*/; do
-            if [ -d "$dir" ]; then
-              cp -r "$dir"* allure-results/ 2>/dev/null || true
-            fi
-          done
-          
-          # Create comprehensive environment.properties for better reporting
+          cp -r reports-downloaded/* allure-results/ 2>/dev/null || true
           cat > allure-results/environment.properties << EOF
-          Test.Suite=Firefly III Comprehensive Test Suite
+          Test.Suite=Firefly III Test Suite
           Environment=${{ github.event.inputs.environment || 'staging' }}
           Python.Version=3.11
           GitHub.Run=${{ github.run_id }}
           GitHub.Workflow=${{ github.workflow }}
           Firefly.URL=${{ env.FIREFLY_URL }}
-          Test.Types=Unit Tests (AI + Webhook), API Integration, Security, Load, Quality
+          Test.Types=Unit, API, Security, Load, Quality, Dependencies
           Timestamp=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          Quality.Checks=Black, Flake8, MyPy, Pylint, Bandit, Safety
-          Security.Tools=Bandit, Safety, Semgrep, Secrets Detection
-          Load.Testing=Locust (10 users, 60s duration)
-          Dependencies=Audit, License Check, Outdated Detection
-          EOF
-
-      - name: Create Comprehensive Test Summary
-        run: |
-          mkdir -p allure-results
-          
-          # Create a summary of all test types
-          cat > allure-results/test-summary.md << 'EOF'
-          # Firefly III Test Suite - Comprehensive Report
-          
-          ## Test Coverage Summary
-          
-          ### ✅ Unit Tests (Always Run)
-          - **AI Categorizer**: 7 tests with mocked OpenAI responses
-          - **Webhook Service**: 9 tests with payload validation
-          - **Coverage**: ~91% for both services
-          - **Runtime**: ~1 second
-          
-          ### 🔌 API Integration Tests (Remote Dependent)
-          - **Firefly III API**: Account, Transaction, Category endpoints
-          - **Environment Tests**: Connectivity and authentication
-          - **Business Workflows**: End-to-end scenarios
-          
-          ### 🛡️ Security Testing
-          - **Static Analysis**: Bandit security linter
-          - **Dependency Scanning**: Safety vulnerability check
-          - **SAST**: Semgrep pattern detection
-          - **Secrets Detection**: Manual pattern matching
-          
-          ### 📊 Code Quality
-          - **Formatting**: Black code formatter
-          - **Import Sorting**: isort
-          - **Style Guide**: Flake8 (PEP 8)
-          - **Type Checking**: MyPy
-          - **Code Analysis**: Pylint
-          
-          ### ⚡ Performance & Load Testing
-          - **Load Testing**: Locust (5 users/30s automatic, 20 users/120s manual)
-          - **Benchmark**: Unit test performance measurement
-          - **Endpoints**: /about, /accounts, /transactions
-          
-          ### 📦 Dependency Analysis
-          - **Vulnerability Audit**: pip-audit
-          - **License Compliance**: pip-licenses
-          - **Dependency Tree**: pipdeptree
-          - **Outdated Packages**: pip list --outdated
-          
-          Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
           EOF
 
       - name: Generate Allure Report
@@ -673,8 +590,6 @@ jobs:
         run: |
           mkdir -p pages-content/test-reports
           cp -r allure-report-firefly/* pages-content/test-reports/
-          
-          # Create a main index page
           cat > pages-content/index.html << 'EOF'
           <!DOCTYPE html>
           <html lang="en">
@@ -695,23 +610,18 @@ jobs:
           <body>
               <div class="container">
                   <h1>🧪 Firefly III Test Reports</h1>
-                  
                   <div class="info">
                       <strong>Test Suite Coverage:</strong>
                       <ul>
                           <li>✅ Unit Tests (AI Categorizer & Webhook Service)</li>
                           <li>🔌 API Integration Tests</li>
-                          <li>🛡️ Security Tests (Bandit, Safety, Semgrep)</li>
-                          <li>📊 Code Quality (Black, Flake8, MyPy, Pylint)</li>
+                          <li>🛡️ Security Tests</li>
+                          <li>📊 Code Quality</li>
                           <li>⚡ Load & Performance Tests</li>
                           <li>📦 Dependency Analysis</li>
                       </ul>
                   </div>
-                  
-                  <a href="test-reports/" class="report-link">
-                      📊 View Latest Test Report (Allure)
-                  </a>
-                  
+                  <a href="test-reports/" class="report-link">📊 View Latest Test Report</a>
                   <div class="timestamp">
                       Last updated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")<br>
                       GitHub Run: #${{ github.run_id }}
@@ -720,7 +630,7 @@ jobs:
           </body>
           </html>
           EOF
-   
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
         if: always()
@@ -735,69 +645,3 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
         if: always()
-
-      - name: Upload Allure Report (Backup)
-        uses: actions/upload-artifact@v4
-        with:
-          name: allure-report-firefly-${{ github.run_id }}
-          path: allure-report-firefly/
-          retention-days: 30
-
-      - name: Upload updated Allure history
-        uses: actions/upload-artifact@v4
-        with:
-          name: allure-history-firefly
-          path: allure-results/history
-          retention-days: 30
-
-      - name: Comment Test Results on PR
-        if: github.event_name == 'pull_request'
-        continue-on-error: true  # Don't fail workflow if comment creation fails
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            try {
-              const fs = require('fs');
-              
-              // Check if allure-results directory exists and has test results
-              let testSummary = "🧪 **Firefly III Test Results**\n\n";
-              testSummary += `📊 **Test Report**: [View on GitHub Pages](${{ steps.deployment.outputs.page_url }}test-reports/)\n`;
-              testSummary += `📋 **Backup Report**: Available in workflow artifacts (allure-report-firefly-${{ github.run_id }})\n\n`;
-              
-              // Add test type information
-              testSummary += "### Tests Executed:\n";
-              testSummary += "✅ **Unit Tests**: AI Categorizer & Webhook Service (16 tests)\n";
-              testSummary += "🔌 **API Tests**: Firefly III Integration (depends on remote instance)\n";
-              testSummary += "🛡️ **Security Tests**: Bandit, Safety, Semgrep, Secrets Detection\n";
-              testSummary += "📊 **Code Quality**: Black, Flake8, MyPy, Pylint\n";
-              testSummary += "⚡ **Load Tests**: Locust performance testing (automatic light tests)\n";
-              testSummary += "📦 **Dependencies**: Vulnerability audit, license check\n\n";
-              
-              testSummary += "### Test Coverage:\n";
-              testSummary += "- AI categorization logic with mocked OpenAI responses\n";
-              testSummary += "- Webhook processing with payload validation\n";
-              testSummary += "- Security vulnerability scanning and code analysis\n";
-              testSummary += "- Code quality and style guide compliance\n";
-              testSummary += "- Dependency analysis and license compliance\n";
-              testSummary += "- API endpoints (if remote Firefly III is available)\n\n";
-              
-              testSummary += `🔗 **Workflow Run**: [#${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\n`;
-              testSummary += `📅 **Timestamp**: ${new Date().toISOString()}\n`;
-              
-              await github.rest.issues.createComment({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body: testSummary
-              });
-              
-              console.log('✅ Test results comment created successfully');
-            } catch (error) {
-              console.log('⚠️ Failed to create comment:', error.message);
-              console.log('📝 Test results are still available in workflow artifacts');
-            }
-
-# 📊 Test Reports: Available as workflow artifacts (download from Actions tab)
-# 🚀 Workflow supports: Unit Tests (AI + Webhook), API Integration Tests, Business Workflows
-# 🎯 Optimized for GitHub Actions with automatic fallback to unit tests if remote services unavailable
