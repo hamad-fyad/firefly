@@ -532,6 +532,9 @@ jobs:
       issues: write
       pull-requests: write
 
+    environment:
+      name: github-pages
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
