@@ -38,6 +38,13 @@ env:
   FIREFLY_VERSION: fireflyiii/core:version-6.3.2
   FIREFLY_DB: mariaDB:noble
   FIREFLY_IMPORTER: fireflyiii/importer:version-1.7.10
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  pages: write
+  id-token: write
   
 jobs:
   unit-tests:
@@ -517,6 +524,8 @@ jobs:
       contents: read
       pages: write
       id-token: write
+      issues: write
+      pull-requests: write
 
     steps:
       - name: Checkout code
@@ -655,7 +664,7 @@ jobs:
       - name: Upload Allure Report
         uses: actions/upload-artifact@v4
         with:
-          name: allure-report-firefly-${{ github.run_id }}
+          name: allure-report-firefly-iii-${{ github.run_id }}
           path: allure-report-firefly-iii/
           retention-days: 30
 
@@ -668,42 +677,50 @@ jobs:
 
       - name: Comment Test Results on PR
         if: github.event_name == 'pull_request'
+        continue-on-error: true  # Don't fail workflow if comment creation fails
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const fs = require('fs');
-            
-            // Check if allure-results directory exists and has test results
-            let testSummary = "🧪 **Firefly III Test Results**\n\n";
-            testSummary += `📊 **Test Report**: Available in workflow artifacts (allure-report-firefly-${{ github.run_id }})\n\n`;
-            
-            // Add test type information
-            testSummary += "### Tests Executed:\n";
-            testSummary += "✅ **Unit Tests**: AI Categorizer & Webhook Service (16 tests)\n";
-            testSummary += "🔌 **API Tests**: Firefly III Integration (depends on remote instance)\n";
-            testSummary += "🛡️ **Security Tests**: Bandit, Safety, Semgrep, Secrets Detection\n";
-            testSummary += "📊 **Code Quality**: Black, Flake8, MyPy, Pylint\n";
-            testSummary += "⚡ **Load Tests**: Locust performance testing (automatic light tests)\n";
-            testSummary += "📦 **Dependencies**: Vulnerability audit, license check\n\n";
-            
-            testSummary += "### Test Coverage:\n";
-            testSummary += "- AI categorization logic with mocked OpenAI responses\n";
-            testSummary += "- Webhook processing with payload validation\n";
-            testSummary += "- Security vulnerability scanning and code analysis\n";
-            testSummary += "- Code quality and style guide compliance\n";
-            testSummary += "- Dependency analysis and license compliance\n";
-            testSummary += "- API endpoints (if remote Firefly III is available)\n\n";
-            
-            testSummary += `🔗 **Workflow Run**: [#${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\n`;
-            testSummary += `📅 **Timestamp**: ${new Date().toISOString()}\n`;
-            
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: testSummary
-            });
+            try {
+              const fs = require('fs');
+              
+              // Check if allure-results directory exists and has test results
+              let testSummary = "🧪 **Firefly III Test Results**\n\n";
+              testSummary += `📊 **Test Report**: Available in workflow artifacts (allure-report-firefly-${{ github.run_id }})\n\n`;
+              
+              // Add test type information
+              testSummary += "### Tests Executed:\n";
+              testSummary += "✅ **Unit Tests**: AI Categorizer & Webhook Service (16 tests)\n";
+              testSummary += "🔌 **API Tests**: Firefly III Integration (depends on remote instance)\n";
+              testSummary += "🛡️ **Security Tests**: Bandit, Safety, Semgrep, Secrets Detection\n";
+              testSummary += "📊 **Code Quality**: Black, Flake8, MyPy, Pylint\n";
+              testSummary += "⚡ **Load Tests**: Locust performance testing (automatic light tests)\n";
+              testSummary += "📦 **Dependencies**: Vulnerability audit, license check\n\n";
+              
+              testSummary += "### Test Coverage:\n";
+              testSummary += "- AI categorization logic with mocked OpenAI responses\n";
+              testSummary += "- Webhook processing with payload validation\n";
+              testSummary += "- Security vulnerability scanning and code analysis\n";
+              testSummary += "- Code quality and style guide compliance\n";
+              testSummary += "- Dependency analysis and license compliance\n";
+              testSummary += "- API endpoints (if remote Firefly III is available)\n\n";
+              
+              testSummary += `🔗 **Workflow Run**: [#${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\n`;
+              testSummary += `📅 **Timestamp**: ${new Date().toISOString()}\n`;
+              
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: testSummary
+              });
+              
+              console.log('✅ Test results comment created successfully');
+            } catch (error) {
+              console.log('⚠️ Failed to create comment:', error.message);
+              console.log('📝 Test results are still available in workflow artifacts');
+            }
 
 # 📊 Test Reports: Available as workflow artifacts (download from Actions tab)
 # 🚀 Workflow supports: Unit Tests (AI + Webhook), API Integration Tests, Business Workflows
