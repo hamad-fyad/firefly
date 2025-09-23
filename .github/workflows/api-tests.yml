@@ -498,6 +498,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [unit-tests, api-tests, code-quality, security-tests, dependency-tests]
     if: always()
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
 
     steps:
       - name: Checkout code
@@ -622,24 +626,22 @@ jobs:
         uses: simple-elf/allure-report-action@master
         with:
           allure_results: allure-results
-          allure_report: allure-report-firefly
-          gh_pages: gh-pages
+          allure_report: allure-report-firefly-iii
           keep_reports: 3
 
+      - name: Upload Allure Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report-firefly-${{ github.run_id }}
+          path: allure-report-firefly-iii/
+          retention-days: 30
+
       - name: Upload updated Allure history
-        run: mkdir -p allure-results/history
-      - uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4
         with:
           name: allure-history-firefly
           path: allure-results/history
           retention-days: 30
-
-      - name: Deploy Allure report to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: allure-report-firefly
-          destination_dir: firefly-tests
 
       - name: Comment Test Results on PR
         if: github.event_name == 'pull_request'
@@ -651,7 +653,7 @@ jobs:
             
             // Check if allure-results directory exists and has test results
             let testSummary = "🧪 **Firefly III Test Results**\n\n";
-            testSummary += `📊 **Test Report**: [View detailed results](https://hamad-fyad.github.io/firefly/firefly-tests/)\n\n`;
+            testSummary += `📊 **Test Report**: Available in workflow artifacts (allure-report-firefly-${{ github.run_id }})\n\n`;
             
             // Add test type information
             testSummary += "### Tests Executed:\n";
@@ -680,6 +682,6 @@ jobs:
               body: testSummary
             });
 
-# 📊 Test Reports: https://hamad-fyad.github.io/firefly/firefly-tests/
+# 📊 Test Reports: Available as workflow artifacts (download from Actions tab)
 # 🚀 Workflow supports: Unit Tests (AI + Webhook), API Integration Tests, Business Workflows
 # 🎯 Optimized for GitHub Actions with automatic fallback to unit tests if remote services unavailable
