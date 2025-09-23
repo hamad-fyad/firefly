@@ -17,22 +17,20 @@ HEADERS = {"Authorization": f"Bearer {FIREFFLY_TOKEN}"}
 async def health_check():
     """Health check endpoint for Docker."""
     try:
-        # Check if model exists and is loadable
-        from app.ai_model import get_model_path
-        model_status = "available"
-        try:
-            get_model_path()
-        except:
-            model_status = "not_available"
+        # Check if OpenAI client can be initialized
+        from app.ai_model import get_openai_client
+        client = get_openai_client()
+        model_status = "available" if client else "openai_key_missing"
         
         return {
             "status": "healthy",
-            "model_status": model_status
+            "model_status": model_status,
+            "model_type": "openai"
         }
     except Exception as e:
         return {
             "status": "healthy",  # Still healthy even without model
-            "model_status": "unknown",
+            "model_status": "error",
             "detail": str(e)
         }
 
