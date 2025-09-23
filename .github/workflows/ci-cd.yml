@@ -150,10 +150,17 @@ jobs:
           
           # Copy necessary files
           cp docker-compose.yaml deployment/
-          cp .db.env deployment/
           cp configure-firefly.sh deployment/
           cp ec2-setup.sh deployment/
           cp ec2-debug.sh deployment/
+          
+          # Create database environment file
+          cat > deployment/.db.env << EOF
+          MARIADB_RANDOM_ROOT_PASSWORD=yes
+          MARIADB_USER=admin
+          MARIADB_PASSWORD=admin
+          MARIADB_DATABASE=firefly
+          EOF
           
           # Create environment file for EC2
           cat > deployment/.env << EOF
