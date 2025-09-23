@@ -1,11 +1,3 @@
-#
-# The Firefly III Data Importer will ask you for the Firefly III URL and a "Client ID".
-# You can generate the Client ID at http://localhost:8080/profile (after registering)
-# The Firefly III URL is: http://app:8080
-#
-# Other URL's will give 500 | Server Error
-#
-
 services:
   app:
     image: fireflyiii/core:version-6.3.2
@@ -21,8 +13,9 @@ services:
       - '8080:8080'
     depends_on:
       - db
+
   db:
-    image: mariadb:lts
+    image: mariadb:noble
     hostname: db
     container_name: firefly_iii_db
     networks:
@@ -46,11 +39,6 @@ services:
     env_file: .importer.env
 
   cron:
-    #
-    # To make this work, set STATIC_CRON_TOKEN in your .env file or as an environment variable and replace PLEASE_REPLACE_WITH_32_CHAR_CODE below
-    # The STATIC_CRON_TOKEN must be *exactly* 32 characters long
-    # Use this URL for inspiration: https://www.random.org/strings/?num=1&len=32&digits=on&upperalpha=on&loweralpha=on&unique=on&format=html&rnd=new
-    #
     image: alpine
     container_name: firefly_iii_cron
     restart: always
@@ -63,9 +51,89 @@ services:
       && crond -f -L /dev/stdout"
     networks:
       - firefly_iii
+
+  ai-service:
+    build:
+      context: ./firefly-ai-categorizer
+    container_name: firefly_iii_ai_service
+    restart: unless-stopped
+    environment:
+      FIREFLY_TOKEN: ${FIREFLY_TOKEN}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      DATABASE_URL: postgresql://ai_user:ai_password@ai-db:5432/ai_metrics
+    depends_on:
+      ai-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    volumes:
+      - ai_service_data:/app/data
+      - ai_service_logs:/app/logs
+    ports:
+      - "8082:8000"  # Expose AI service for metrics dashboard
+    expose:
+      - "8000"
+    networks:
+      - firefly_iii
+
+  ai-db:
+    image: postgres:15-alpine
+    container_name: firefly_iii_ai_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ai_metrics
+      POSTGRES_USER: ai_user
+      POSTGRES_PASSWORD: ai_password
+    volumes:
+      - ai_db_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"  # Avoid conflict with main DB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_user -d ai_metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - firefly_iii
+
+  webhook-service:
+    build:
+      context: ./webhook_service
+    container_name: firefly_iii_webhook_service
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    environment:
+      FIREFLY_API_URL: http://app:8080
+      FIREFLY_TOKEN: ${FIREFLY_TOKEN}
+      AI_SERVICE_URL: http://ai-service:8000
+    volumes:
+      - webhook_service_logs:/app/logs
+    ports:
+      - "8001:8001"
+    depends_on:
+      ai-service:
+        condition: service_healthy
+      app:
+        condition: service_started
+    networks:
+      - firefly_iii
+
 volumes:
    firefly_iii_upload:
    firefly_iii_db:
+   ai_service_data:
+   ai_service_logs:
+   webhook_service_logs:
+   ai_db_data:
 
 networks:
   firefly_iii:
