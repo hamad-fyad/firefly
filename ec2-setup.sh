@@ -47,11 +47,26 @@ install_docker_ubuntu() {
         gnupg \
         lsb-release
 
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] \
-        https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
-        | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    # Try to add Docker GPG key with proper flags for non-interactive environment
+    if ! curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor --batch --yes -o /usr/share/keyrings/docker-archive-keyring.gpg 2>/dev/null; then
+        log_warn "GPG method failed, trying alternative Docker installation..."
+        # Fallback: use snap or direct package installation
+        if command -v snap >/dev/null 2>&1; then
+            log_info "Installing Docker via snap..."
+            sudo snap install docker
+        else
+            log_info "Installing Docker via default repository..."
+            sudo apt-get install -y docker.io docker-compose
+        fi
+    else
+        # Continue with official Docker repository
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] \
+            https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
+            | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+        
+        sudo apt-get update -y
+        sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+    fi
 
     sudo apt-get update -y
     sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
