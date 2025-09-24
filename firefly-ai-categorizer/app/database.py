@@ -95,8 +95,9 @@ def test_connection() -> bool:
         return False
         
     try:
+        from sqlalchemy import text
         with engine.connect() as connection:
-            connection.execute("SELECT 1")
+            connection.execute(text("SELECT 1"))
         logger.info("Database connection test successful")
         return True
     except Exception as e:

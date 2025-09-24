@@ -124,6 +124,22 @@ async def transaction_updated(request: Request):
     return {"status": "Feedback stored", "category": user_cat}
 
 
+@app.post("/test-categorize")
+async def test_categorize(request: Request):
+    """Test endpoint for manual categorization testing."""
+    data = await request.json()
+    description = data.get("description", "")
+    
+    if not description:
+        return JSONResponse(status_code=400, content={"error": "Description required"})
+    
+    try:
+        category = predict_category(description)
+        return {"description": description, "predicted_category": category, "source": "ai_service"}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
 @app.get("/metrics", response_class=HTMLResponse)
 async def metrics_dashboard():
     """Serve the metrics dashboard UI."""

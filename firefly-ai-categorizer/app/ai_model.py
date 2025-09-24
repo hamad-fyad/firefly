@@ -196,7 +196,25 @@ def predict_category(description: str) -> str:
     except Exception as e:
         logger.error("Error during OpenAI prediction: %s", str(e))
         # Fallback to basic categorization logic
-        return fallback_categorization(description)
+        fallback_category = fallback_categorization(description)
+        
+        # Record the fallback prediction with lower confidence
+        confidence = 0.6  # Lower confidence for fallback predictions
+        metadata = model_manager.load_metadata()
+        current_version = metadata.get("current_version", "fallback-v1")
+        
+        try:
+            model_metrics.record_prediction(
+                version_id=current_version,
+                description=description,
+                predicted_category=fallback_category,
+                confidence=confidence
+            )
+            logger.info("Recorded fallback prediction: '%s' -> '%s'", description, fallback_category)
+        except Exception as metrics_error:
+            logger.error("Failed to record fallback prediction metrics: %s", str(metrics_error))
+        
+        return fallback_category
 
 def fallback_categorization(description: str) -> str:
     """

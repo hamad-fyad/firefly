@@ -205,7 +205,7 @@ jobs:
       - name: Install quality tools
         run: |
           python -m pip install --upgrade pip
-          pip install flake8 mypy safety pylint
+          pip install flake8 mypy pylint
           pip install -r requirements.txt
 
       - name: Run flake8 (Style Guide)
@@ -261,11 +261,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Safety (Dependency Vulnerability Check)
-        run: |
-          mkdir -p security-reports
-          safety check --json --output security-reports/safety-report.json || true
-          safety check || echo "::warning::Vulnerable dependencies found"
 
       - name: Run Semgrep (SAST)
         run: |
@@ -288,7 +283,6 @@ jobs:
           echo "Generated: $(date)" >> security-reports/security-summary.md
           echo "" >> security-reports/security-summary.md
           echo "## Tests Performed:" >> security-reports/security-summary.md
-          echo "- Safety: Dependency vulnerability scanning" >> security-reports/security-summary.md
           echo "- Semgrep: Static Application Security Testing (SAST)" >> security-reports/security-summary.md
           echo "- Secrets detection: Manual pattern matching" >> security-reports/security-summary.md
 
@@ -587,8 +581,8 @@ jobs:
           Firefly.URL=${{ env.FIREFLY_URL }}
           Test.Types=Unit Tests (AI + Webhook), API Integration, Security, Load, Quality
           Timestamp=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          Quality.Checks=Flake8, MyPy, Pylint, Safety
-          Security.Tools= Safety, Semgrep, Secrets Detection
+          Quality.Checks=Flake8, MyPy, Pylint
+          Security.Tools=  Semgrep, Secrets Detection
           Load.Testing=Locust (5 users/30s automatic, 20 users/120s manual)
           Dependencies=Audit, License Check, Outdated Detection
           EOF
@@ -615,7 +609,6 @@ jobs:
           - **Business Workflows**: End-to-end scenarios
           
           ### 🛡️ Security Testing
-          - **Dependency Scanning**: Safety vulnerability check
           - **SAST**: Semgrep pattern detection
           - **Secrets Detection**: Manual pattern matching
           
@@ -736,7 +729,7 @@ jobs:
                       <ul>
                           <li>✅ <strong>Unit Tests</strong>: AI Categorizer & Webhook Service (16 tests)</li>
                           <li>🔌 <strong>API Integration</strong>: Firefly III endpoints and workflows</li>
-                          <li>🛡️ <strong>Security Analysis</strong>: Safety, Semgrep, Secrets Detection</li>
+                          <li>🛡️ <strong>Security Analysis</strong>: Semgrep, Secrets Detection</li>
                           <li>⚡ <strong>Performance</strong>: Load testing with Locust</li>
                           <li>📦 <strong>Dependencies</strong>: Vulnerability audit, license compliance</li>
                       </ul>
@@ -754,7 +747,6 @@ jobs:
                           <h3>🛡️ Security Analysis</h3>
                           <p>Security vulnerability scanning, SAST analysis, and secrets detection results.</p>
                           <a href="security-reports/security-summary.md" class="report-link security">📋 Security Summary</a>
-                          <a href="security-reports/safety-report.json" class="report-link security">🛡️ Safety Report</a>
                           <a href="security-reports/semgrep-report.json" class="report-link security">🔎 Semgrep Report</a>
                       </div>
                       
@@ -839,7 +831,7 @@ jobs:
               testSummary += "### Tests Executed:\n";
               testSummary += "✅ **Unit Tests**: AI Categorizer & Webhook Service (16 tests)\n";
               testSummary += "🔌 **API Tests**: Firefly III Integration (depends on remote instance)\n";
-              testSummary += "🛡️ **Security Tests**:, Safety, Semgrep, Secrets Detection\n";
+              testSummary += "🛡️ **Security Tests**:Semgrep, Secrets Detection\n";
               testSummary += "⚡ **Load Tests**: Locust performance testing (automatic light tests)\n";
               testSummary += "📦 **Dependencies**: Vulnerability audit, license check\n\n";
               

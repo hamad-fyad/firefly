@@ -1,3 +1,10 @@
+"""
+Account Management Tests - Firefly III Financial Account Operations
+
+Tests core account functionality including creation, retrieval, updates, and deletion.
+Accounts are fundamental to financial tracking - they represent bank accounts, 
+credit cards, cash accounts, and other financial containers.
+"""
 import requests
 import pytest
 import config
@@ -8,6 +15,7 @@ import random
 @pytest.mark.requires_firefly
 @pytest.mark.business_workflow
 def generate_unique_account_name():
+    """Generate unique account name with timestamp to prevent collisions."""
     return f"test_account_{datetime.now().strftime('%Y%m%d%H%M%S')}_{random.randint(1000, 9999)}"
 
 @pytest.mark.api
@@ -35,10 +43,11 @@ def created_account_id():
 @pytest.mark.business_workflow
 @pytest.mark.github_actions
 def test_post_account():
+    """Test account creation - validates new financial account setup."""
     unique_name = generate_unique_account_name()
     payload = {
         "name": unique_name,
-        "type": "asset",
+        "type": "asset",            # Asset account (bank, cash, etc.)
         "account_role": "sharedAsset",
     }
     response = requests.post(config.BASE_URL + '/accounts', headers=config.HEADERS, json=payload)
@@ -48,12 +57,14 @@ def test_post_account():
     assert data.get("type") == "asset"
 
 def test_get_created_account(created_account_id):
+    """Test account retrieval - validates accessing existing account data."""
     response = requests.get(f"{config.BASE_URL}/accounts/{created_account_id}", headers=config.HEADERS)
     assert response.status_code == 200
     data = response.json().get("data", {}).get("attributes", {})
     assert data.get("name", "").startswith("test_account_")
 
 def test_update_created_account(created_account_id):
+    """Test account modification - validates updating account details."""
     updated_name = generate_unique_account_name()
     payload = {
         "name": updated_name,
