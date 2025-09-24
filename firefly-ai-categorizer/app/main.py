@@ -5,7 +5,7 @@ import httpx
 from app.ai_model import predict_category, retrain_model
 from app.feedback_storage import save_feedback
 from app.model_metrics import get_model_performance_summary, get_predictions_data
-import dotenv, os
+import dotenv, os, time
 app = FastAPI()
 dotenv.load_dotenv()
 FIREFFLY_API = "http://app:8080/api/v1"
@@ -153,6 +153,79 @@ async def test_categorize(request: Request):
         return {"description": description, "predicted_category": category, "source": "ai_service"}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/status")
+async def model_status():
+    """User-friendly model status endpoint."""
+    try:
+        from app.ai_model import get_openai_client, fallback_categorization
+        import os
+        
+        client = get_openai_client()
+        api_key_set = bool(os.environ.get("OPENAI_API_KEY"))
+        
+        status = {
+            "service": "AI Transaction Categorizer",
+            "timestamp": time.time(),
+            "model_info": {}
+        }
+        
+        if not api_key_set:
+            status["model_info"] = {
+                "type": "keyword_based",
+                "status": "active",
+                "message": "Using fast keyword-based categorization",
+                "accuracy": "Good for common transactions",
+                "cost": "Free"
+            }
+        elif client:
+            try:
+                # Quick OpenAI test
+                response = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[{"role": "user", "content": "test"}],
+                    max_tokens=3,
+                    timeout=5
+                )
+                status["model_info"] = {
+                    "type": "openai_gpt",
+                    "status": "active", 
+                    "message": "Using OpenAI GPT-3.5 for advanced categorization",
+                    "accuracy": "Excellent for all transaction types",
+                    "cost": "Pay-per-use"
+                }
+            except Exception as e:
+                if "insufficient_quota" in str(e) or "429" in str(e):
+                    status["model_info"] = {
+                        "type": "keyword_based",
+                        "status": "fallback_active",
+                        "message": "OpenAI quota exceeded - using keyword fallback",
+                        "accuracy": "Good for common transactions", 
+                        "cost": "Free",
+                        "note": "Add OpenAI credits to restore advanced AI categorization"
+                    }
+                else:
+                    status["model_info"] = {
+                        "type": "keyword_based",
+                        "status": "fallback_active",
+                        "message": f"OpenAI error - using keyword fallback: {str(e)[:50]}",
+                        "accuracy": "Good for common transactions",
+                        "cost": "Free"
+                    }
+        
+        # Test current categorization
+        test_result = fallback_categorization("grocery store purchase")
+        status["test_categorization"] = {
+            "input": "grocery store purchase",
+            "output": test_result,
+            "working": test_result == "Food & Drink"
+        }
+        
+        return status
+        
+    except Exception as e:
+        return {"error": str(e), "service": "AI Transaction Categorizer", "status": "error"}
 
 
 @app.get("/debug")
