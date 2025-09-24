@@ -464,7 +464,7 @@ jobs:
 
       - name: 📦 Install Dependencies
         run: |
-          pip install --no-deps requests pytest python-dotenv
+          pip install requests pytest python-dotenv urllib3 certifi charset-normalizer idna
 
       - name: 🧪 Run Deployment Tests
         env:
