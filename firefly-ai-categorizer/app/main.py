@@ -17,22 +17,37 @@ HEADERS = {"Authorization": f"Bearer {FIREFFLY_TOKEN}"}
 async def health_check():
     """Health check endpoint for Docker."""
     try:
-        # Check if OpenAI client can be initialized
         from app.ai_model import get_openai_client
         client = get_openai_client()
-        model_status = "available" if client else "openai_key_missing"
         
-        return {
-            "status": "healthy",
-            "model_status": model_status,
-            "model_type": "openai"
-        }
+        if client:
+            # Test if OpenAI is actually working (not just configured)
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[{"role": "user", "content": "test"}],
+                    max_tokens=5,
+                    timeout=3
+                )
+                model_status = "available"
+                model_type = "openai"
+            except Exception as openai_error:
+                # OpenAI configured but not working (quota/network issues)
+                if "insufficient_quota" in str(openai_error) or "429" in str(openai_error):
+                    model_status = "quota_exceeded"
+                    model_type = "fallback_active"
+                else:
+                    model_status = "error"
+                    model_type = "fallback_active"
+        else:
+            model_status = "fallback"
+            model_type = "keywords"
+            
+        return {"status": "healthy", "model_status": model_status, "model_type": model_type}
+        
     except Exception as e:
-        return {
-            "status": "healthy",  # Still healthy even without model
-            "model_status": "error",
-            "detail": str(e)
-        }
+        return {"status": "error", "model_status": "unknown", "error": str(e)}
+
 
 @app.post("/incoming")
 async def incoming_event(request: Request):
