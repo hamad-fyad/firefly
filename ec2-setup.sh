@@ -1,121 +1,238 @@
-#!/bin/bash#!/bin/bash
+#!/bin/bash#!/bin/bash#!/bin/bash
 
 
 
-echo "=== EC2 System Setup Script ==="echo "=== EC2 System Setup Script ==="
+echo "=== EC2 System Setup Script ==="
 
-echo "Installing and configuring required dependencies on EC2"echo "Installing and configuring required dependencies on EC2"
+echo "Installing and configuring required dependencies on EC2"
 
-echo ""echo ""
+echo ""echo "=== EC2 System Setup Script ==="echo "=== EC2 System Setup Script ==="
 
 
 
-# Colors for output# Colors for output
+# Colors for outputecho "Installing and configuring required dependencies on EC2"echo "Installing and configuring required dependencies on EC2"
 
 RED='\033[0;31m'
 
-GREEN='\033[0;32m'RED='\033[0;31m'# Check if running as root
+GREEN='\033[0;32m'echo ""echo ""
 
 YELLOW='\033[1;33m'
 
-BLUE='\033[0;34m'GREEN='\033[0;32m'if [ "$EUID" -eq 0 ]; then
+BLUE='\033[0;34m'
 
 NC='\033[0m' # No Color
 
-YELLOW='\033[1;33m'    echo "⚠️  Running as root. This is generally not recommended."
+# Colors for output# Colors for output
 
 # Function to print status messages
 
-print_status() {NC='\033[0m' # No Color    echo "Consider running as a regular user with sudo privileges."
+print_status() {RED='\033[0;31m'
 
     echo -e "${BLUE}[INFO]${NC} $1"
 
-}fi
+}GREEN='\033[0;32m'RED='\033[0;31m'# Check if running as root
 
 
 
-print_success() {log_info() {
+print_success() {YELLOW='\033[1;33m'
 
     echo -e "${GREEN}[SUCCESS]${NC} $1"
 
-}    echo -e "${GREEN}[INFO]${NC} $1"# Function to detect OS
+}BLUE='\033[0;34m'GREEN='\033[0;32m'if [ "$EUID" -eq 0 ]; then
 
 
 
-print_warning() {}detect_os() {
+print_warning() {NC='\033[0m' # No Color
 
     echo -e "${YELLOW}[WARNING]${NC} $1"
 
-}    if [ -f /etc/os-release ]; then
+}YELLOW='\033[1;33m'    echo "⚠️  Running as root. This is generally not recommended."
 
 
 
-print_error() {log_warn() {        . /etc/os-release
+print_error() {# Function to print status messages
 
     echo -e "${RED}[ERROR]${NC} $1"
 
-}    echo -e "${YELLOW}[WARN]${NC} $1"        OS=$NAME
+}print_status() {NC='\033[0m' # No Color    echo "Consider running as a regular user with sudo privileges."
 
 
 
-# Function to check if command succeeded}        VER=$VERSION_ID
+# Function to check if command succeeded    echo -e "${BLUE}[INFO]${NC} $1"
 
 check_command() {
 
-    if [ $? -eq 0 ]; then    elif type lsb_release >/dev/null 2>&1; then
+    if [ $? -eq 0 ]; then}fi
 
         print_success "$1"
 
-    elselog_error() {        OS=$(lsb_release -si)
+    else
 
         print_error "$2"
 
-        exit 1    echo -e "${RED}[ERROR]${NC} $1"        VER=$(lsb_release -sr)
+        exit 1print_success() {log_info() {
 
     fi
 
-}}    elif [ -f /etc/lsb-release ]; then
+}    echo -e "${GREEN}[SUCCESS]${NC} $1"
 
 
 
-print_status "Starting EC2 system setup..."        . /etc/lsb-release
+print_status "Starting EC2 system setup..."}    echo -e "${GREEN}[INFO]${NC} $1"# Function to detect OS
 
 
 
-# Update system packages# Update system packages        OS=$DISTRIB_ID
+# Update system packages
 
 print_status "Updating system packages..."
 
-sudo yum update -yupdate_system() {        VER=$DISTRIB_RELEASE
+sudo yum update -yprint_warning() {}detect_os() {
 
 check_command "System packages updated successfully" "Failed to update system packages"
 
-    log_info "Updating system packages..."    else
+    echo -e "${YELLOW}[WARNING]${NC} $1"
 
 # Install Docker
 
-print_status "Installing Docker..."            OS=$(uname -s)
+print_status "Installing Docker..."}    if [ -f /etc/os-release ]; then
 
 sudo yum install -y docker
 
-check_command "Docker installed successfully" "Failed to install Docker"    # Detect OS        VER=$(uname -r)
+check_command "Docker installed successfully" "Failed to install Docker"
 
 
 
-# Start and enable Docker service    if command -v apt-get &> /dev/null; then    fi
+# Start and enable Docker serviceprint_error() {log_warn() {        . /etc/os-release
 
 print_status "Starting Docker service..."
 
-sudo systemctl start docker        # Ubuntu/Debian    echo "Detected OS: $OS $VER"
+sudo systemctl start docker    echo -e "${RED}[ERROR]${NC} $1"
 
 check_command "Docker service started" "Failed to start Docker service"
 
-        sudo apt-get update -y}
+}    echo -e "${YELLOW}[WARN]${NC} $1"        OS=$NAME
 
 sudo systemctl enable docker
 
-check_command "Docker service enabled for auto-start" "Failed to enable Docker service"        sudo apt-get upgrade -y
+check_command "Docker service enabled for auto-start" "Failed to enable Docker service"
 
+
+
+# Add ec2-user to docker group# Function to check if command succeeded}        VER=$VERSION_ID
+
+print_status "Adding ec2-user to docker group..."
+
+sudo usermod -a -G docker ec2-usercheck_command() {
+
+check_command "User added to docker group" "Failed to add user to docker group"
+
+    if [ $? -eq 0 ]; then    elif type lsb_release >/dev/null 2>&1; then
+
+# Install Docker Compose
+
+print_status "Installing Docker Compose..."        print_success "$1"
+
+sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+
+check_command "Docker Compose downloaded" "Failed to download Docker Compose"    elselog_error() {        OS=$(lsb_release -si)
+
+
+
+sudo chmod +x /usr/local/bin/docker-compose        print_error "$2"
+
+check_command "Docker Compose made executable" "Failed to make Docker Compose executable"
+
+        exit 1    echo -e "${RED}[ERROR]${NC} $1"        VER=$(lsb_release -sr)
+
+# Verify installations
+
+print_status "Verifying installations..."    fi
+
+docker --version
+
+check_command "Docker version check passed" "Docker installation verification failed"}}    elif [ -f /etc/lsb-release ]; then
+
+
+
+docker-compose --version
+
+check_command "Docker Compose version check passed" "Docker Compose installation verification failed"
+
+print_status "Starting EC2 system setup..."        . /etc/lsb-release
+
+# Install git (if not already installed)
+
+print_status "Installing Git..."
+
+sudo yum install -y git
+
+check_command "Git installed successfully" "Failed to install Git"# Update system packages# Update system packages        OS=$DISTRIB_ID
+
+
+
+# Install unzip (useful for extracting files)print_status "Updating system packages..."
+
+print_status "Installing unzip utility..."
+
+sudo yum install -y unzipsudo yum update -yupdate_system() {        VER=$DISTRIB_RELEASE
+
+check_command "Unzip installed successfully" "Failed to install unzip"
+
+check_command "System packages updated successfully" "Failed to update system packages"
+
+# Create necessary directories
+
+print_status "Creating application directories..."    log_info "Updating system packages..."    else
+
+mkdir -p /home/ec2-user/firefly-ai
+
+check_command "Application directory created" "Failed to create application directory"# Install Docker
+
+
+
+# Set proper permissionsprint_status "Installing Docker..."            OS=$(uname -s)
+
+print_status "Setting directory permissions..."
+
+sudo chown -R ec2-user:ec2-user /home/ec2-user/firefly-aisudo yum install -y docker
+
+check_command "Directory permissions set" "Failed to set directory permissions"
+
+check_command "Docker installed successfully" "Failed to install Docker"    # Detect OS        VER=$(uname -r)
+
+print_success "EC2 system setup completed successfully!"
+
+print_status "System is ready for Firefly III deployment"
+
+print_warning "Remember to:"
+
+print_warning "1. Update OPENAI_API_KEY in .env file"# Start and enable Docker service    if command -v apt-get &> /dev/null; then    fi
+
+print_warning "2. Update APP_URL with your actual domain/IP"
+
+print_warning "3. Generate a new APP_KEY for security"print_status "Starting Docker service..."
+
+print_warning "4. Log out and back in for docker group changes to take effect"
+
+sudo systemctl start docker        # Ubuntu/Debian    echo "Detected OS: $OS $VER"
+
+echo ""
+
+print_status "Setup Summary:"check_command "Docker service started" "Failed to start Docker service"
+
+echo "  ✓ System packages updated"
+
+echo "  ✓ Docker installed and configured"        sudo apt-get update -y}
+
+echo "  ✓ Docker Compose installed"
+
+echo "  ✓ Git installed"sudo systemctl enable docker
+
+echo "  ✓ Application directories created"
+
+echo ""check_command "Docker service enabled for auto-start" "Failed to enable Docker service"        sudo apt-get upgrade -y
+
+print_success "EC2 setup complete! Ready for application deployment."
 
 
 # Add ec2-user to docker group        sudo apt-get install -y curl wget git unzip# Install Docker on Ubuntu/Debian

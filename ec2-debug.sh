@@ -1,4 +1,4 @@
-#!/bin/bash#!/bin/bash#!/bin/bash
+#!/bin/bash#!/bin/bash#!/bin/bash#!/bin/bash
 
 
 
@@ -6,141 +6,283 @@ echo "=== EC2 Debug Script ==="
 
 echo "Collecting debug information for troubleshooting deployment issues"
 
-echo "Date: $(date)"echo "=== EC2 Debug Script ==="echo "=== EC2 Firefly Deployment Debugging Script ==="
+echo "Date: $(date)"echo "=== EC2 Debug Script ==="
 
 echo "Hostname: $(hostname)"
 
-echo ""echo "Collecting debug information for troubleshooting deployment issues"echo "Date: $(date)"
+echo ""echo "Collecting debug information for troubleshooting deployment issues"
 
 
 
-# Colors for outputecho "Hostname: $(hostname)"
+# Colors for outputecho "Date: $(date)"echo "=== EC2 Debug Script ==="echo "=== EC2 Firefly Deployment Debugging Script ==="
 
 RED='\033[0;31m'
 
-GREEN='\033[0;32m'# Colors for outputecho ""
+GREEN='\033[0;32m'echo "Hostname: $(hostname)"
 
 YELLOW='\033[1;33m'
 
-BLUE='\033[0;34m'RED='\033[0;31m'
+BLUE='\033[0;34m'echo ""echo "Collecting debug information for troubleshooting deployment issues"echo "Date: $(date)"
 
 NC='\033[0m' # No Color
 
-GREEN='\033[0;32m'# System Information
+
 
 print_header() {
 
-    echo -e "\n${BLUE}===== $1 =====${NC}"YELLOW='\033[1;33m'echo "=== SYSTEM INFORMATION ==="
+    echo -e "\n${BLUE}===== $1 =====${NC}"# Colors for outputecho "Hostname: $(hostname)"
 
 }
 
-NC='\033[0m' # No Colorecho "OS: $(cat /etc/os-release | grep PRETTY_NAME)"
+RED='\033[0;31m'
 
 print_status() {
 
-    echo -e "${GREEN}[INFO]${NC} $1"echo "Architecture: $(uname -m)"
+    echo -e "${GREEN}[INFO]${NC} $1"GREEN='\033[0;32m'# Colors for outputecho ""
 
 }
 
-log_info() {echo "Kernel: $(uname -r)"
+YELLOW='\033[1;33m'
 
 print_warning() {
 
-    echo -e "${YELLOW}[WARNING]${NC} $1"    echo -e "${GREEN}[INFO]${NC} $1"echo "Memory: $(free -h | grep Mem)"
+    echo -e "${YELLOW}[WARNING]${NC} $1"BLUE='\033[0;34m'RED='\033[0;31m'
 
 }
 
-}echo "Disk: $(df -h / | tail -1)"
+NC='\033[0m' # No Color
 
 print_error() {
 
-    echo -e "${RED}[ERROR]${NC} $1"echo ""
+    echo -e "${RED}[ERROR]${NC} $1"GREEN='\033[0;32m'# System Information
 
 }
 
-log_warn() {
+print_header() {
 
 # System Information
 
-print_header "SYSTEM INFORMATION"    echo -e "${YELLOW}[WARN]${NC} $1"# Docker Installation Check
+print_header "SYSTEM INFORMATION"    echo -e "\n${BLUE}===== $1 =====${NC}"YELLOW='\033[1;33m'echo "=== SYSTEM INFORMATION ==="
 
 echo "Operating System: $(cat /etc/os-release | grep PRETTY_NAME | cut -d'"' -f2)"
 
-echo "Kernel Version: $(uname -r)"}echo "=== DOCKER ENVIRONMENT ==="
+echo "Kernel Version: $(uname -r)"}
 
 echo "Architecture: $(uname -m)"
 
-echo "Uptime: $(uptime)"if command -v docker &> /dev/null; then
+echo "Uptime: $(uptime)"NC='\033[0m' # No Colorecho "OS: $(cat /etc/os-release | grep PRETTY_NAME)"
 
 echo "Memory Usage: $(free -h | grep Mem)"
 
-echo "Disk Usage: $(df -h / | tail -1)"log_error() {    echo "✅ Docker installed: $(docker --version)"
+echo "Disk Usage: $(df -h / | tail -1)"print_status() {
 
 
 
-# Docker Information    echo -e "${RED}[ERROR]${NC} $1"    echo "Docker status: $(systemctl is-active docker 2>/dev/null || echo 'Service not found')"
+# Docker Information    echo -e "${GREEN}[INFO]${NC} $1"echo "Architecture: $(uname -m)"
 
 print_header "DOCKER INFORMATION"
 
-if command -v docker &> /dev/null; then}    echo "Docker user groups: $(groups $USER | grep -o docker || echo 'User not in docker group')"
+if command -v docker &> /dev/null; then}
 
     print_status "Docker is installed"
 
-    echo "Docker Version: $(docker --version)"else
+    echo "Docker Version: $(docker --version)"log_info() {echo "Kernel: $(uname -r)"
 
     echo "Docker Status: $(systemctl is-active docker)"
 
-    # System Information    echo "❌ Docker not installed"
+    print_warning() {
 
     print_status "Docker Images:"
 
-    docker images || print_error "Failed to list Docker images"show_system_info() {fi
+    docker images || print_error "Failed to list Docker images"    echo -e "${YELLOW}[WARNING]${NC} $1"    echo -e "${GREEN}[INFO]${NC} $1"echo "Memory: $(free -h | grep Mem)"
 
     
 
-    print_status "Running Containers:"    log_info "=== System Information ==="
+    print_status "Running Containers:"}
 
     docker ps || print_error "Failed to list running containers"
 
-        echo "OS: $(uname -a)"if command -v docker-compose &> /dev/null; then
+    }echo "Disk: $(df -h / | tail -1)"
 
     print_status "All Containers:"
 
-    docker ps -a || print_error "Failed to list all containers"    echo "Date: $(date)"    echo "✅ Docker Compose v1: $(docker-compose --version)"
+    docker ps -a || print_error "Failed to list all containers"print_error() {
 
     
 
-    print_status "Docker Networks:"    echo "Uptime: $(uptime)"else
+    print_status "Docker Networks:"    echo -e "${RED}[ERROR]${NC} $1"echo ""
 
     docker network ls || print_error "Failed to list Docker networks"
 
-        echo "Disk Usage: $(df -h / | tail -1)"    echo "❌ Docker Compose v1 not found"
+    }
 
     print_status "Docker Volumes:"
 
-    docker volume ls || print_error "Failed to list Docker volumes"    echo "Memory: $(free -h | grep Mem)"fi
+    docker volume ls || print_error "Failed to list Docker volumes"log_warn() {
+
+else
+
+    print_error "Docker is not installed or not in PATH"# System Information
+
+fi
+
+print_header "SYSTEM INFORMATION"    echo -e "${YELLOW}[WARN]${NC} $1"# Docker Installation Check
+
+# Docker Compose Information
+
+print_header "DOCKER COMPOSE INFORMATION"echo "Operating System: $(cat /etc/os-release | grep PRETTY_NAME | cut -d'"' -f2)"
+
+if command -v docker-compose &> /dev/null; then
+
+    print_status "Docker Compose is installed"echo "Kernel Version: $(uname -r)"}echo "=== DOCKER ENVIRONMENT ==="
+
+    echo "Docker Compose Version: $(docker-compose --version)"
+
+elseecho "Architecture: $(uname -m)"
+
+    print_error "Docker Compose is not installed or not in PATH"
+
+fiecho "Uptime: $(uptime)"if command -v docker &> /dev/null; then
+
+
+
+# Application Directory Informationecho "Memory Usage: $(free -h | grep Mem)"
+
+print_header "APPLICATION DIRECTORY INFORMATION"
+
+APP_DIR="/home/ec2-user/firefly"echo "Disk Usage: $(df -h / | tail -1)"log_error() {    echo "✅ Docker installed: $(docker --version)"
+
+if [ -d "$APP_DIR" ]; then
+
+    print_status "Application directory exists: $APP_DIR"
+
+    echo "Directory contents:"
+
+    ls -la "$APP_DIR" || print_error "Failed to list directory contents"# Docker Information    echo -e "${RED}[ERROR]${NC} $1"    echo "Docker status: $(systemctl is-active docker 2>/dev/null || echo 'Service not found')"
 
     
 
-    print_status "Docker System Info:"    echo "User: $(whoami)"
+    if [ -f "$APP_DIR/docker-compose.yaml" ] || [ -f "$APP_DIR/docker-compose.yml" ]; thenprint_header "DOCKER INFORMATION"
 
-    docker system df || print_error "Failed to get Docker system info"
+        print_status "Docker Compose file found"
 
-else    echo "Groups: $(groups)"if docker compose version &> /dev/null; then
+    elseif command -v docker &> /dev/null; then}    echo "Docker user groups: $(groups $USER | grep -o docker || echo 'User not in docker group')"
 
-    print_error "Docker is not installed or not in PATH"
+        print_warning "No Docker Compose file found in application directory"
 
-fi    echo ""    echo "✅ Docker Compose v2: $(docker compose version)"
+    fi    print_status "Docker is installed"
+
+    
+
+    if [ -f "$APP_DIR/.env" ]; then    echo "Docker Version: $(docker --version)"else
+
+        print_status ".env file exists"
+
+        echo ".env file size: $(stat -c%s "$APP_DIR/.env" 2>/dev/null || echo "Unknown")"    echo "Docker Status: $(systemctl is-active docker)"
+
+    else
+
+        print_warning "No .env file found"    # System Information    echo "❌ Docker not installed"
+
+    fi
+
+else    print_status "Docker Images:"
+
+    print_error "Application directory does not exist: $APP_DIR"
+
+fi    docker images || print_error "Failed to list Docker images"show_system_info() {fi
 
 
 
-# Docker Compose Information}else
+# Network Information    
 
-print_header "DOCKER COMPOSE INFORMATION"
+print_header "NETWORK INFORMATION"
 
-if command -v docker-compose &> /dev/null; then    echo "❌ Docker Compose v2 not found"
+echo "Network Interfaces:"    print_status "Running Containers:"    log_info "=== System Information ==="
 
-    print_status "Docker Compose is installed"
+ip addr show || ifconfig || print_error "Failed to show network interfaces"
+
+    docker ps || print_error "Failed to list running containers"
+
+echo -e "\nListening Ports:"
+
+netstat -tlnp 2>/dev/null || ss -tlnp || print_error "Failed to show listening ports"        echo "OS: $(uname -a)"if command -v docker-compose &> /dev/null; then
+
+
+
+# Process Information    print_status "All Containers:"
+
+print_header "PROCESS INFORMATION"
+
+echo "Running processes (related to Docker/Firefly):"    docker ps -a || print_error "Failed to list all containers"    echo "Date: $(date)"    echo "✅ Docker Compose v1: $(docker-compose --version)"
+
+ps aux | grep -E "(docker|firefly|postgres)" | grep -v grep || echo "No relevant processes found"
+
+    
+
+# Log Information
+
+print_header "LOG INFORMATION"    print_status "Docker Networks:"    echo "Uptime: $(uptime)"else
+
+echo "Recent system logs (last 20 lines):"
+
+journalctl --no-pager -n 20 || print_error "Failed to retrieve system logs"    docker network ls || print_error "Failed to list Docker networks"
+
+
+
+if command -v docker &> /dev/null; then        echo "Disk Usage: $(df -h / | tail -1)"    echo "❌ Docker Compose v1 not found"
+
+    echo -e "\nRecent Docker logs:"
+
+    docker logs $(docker ps -q) --tail=10 2>/dev/null || echo "No containers running or failed to get logs"    print_status "Docker Volumes:"
+
+fi
+
+    docker volume ls || print_error "Failed to list Docker volumes"    echo "Memory: $(free -h | grep Mem)"fi
+
+# Environment Variables
+
+print_header "ENVIRONMENT VARIABLES"    
+
+echo "Docker-related environment variables:"
+
+env | grep -i docker || echo "No Docker environment variables found"    print_status "Docker System Info:"    echo "User: $(whoami)"
+
+
+
+echo -e "\nUser and group information:"    docker system df || print_error "Failed to get Docker system info"
+
+echo "Current user: $(whoami)"
+
+echo "User groups: $(groups)"else    echo "Groups: $(groups)"if docker compose version &> /dev/null; then
+
+
+
+# Final Status    print_error "Docker is not installed or not in PATH"
+
+print_header "DEBUG SUMMARY"
+
+print_status "Debug information collection completed"fi    echo ""    echo "✅ Docker Compose v2: $(docker compose version)"
+
+echo "Timestamp: $(date)"
+
+echo ""
+
+print_status "Key areas to check based on above output:"
+
+echo "1. Ensure Docker is running and accessible"# Docker Compose Information}else
+
+echo "2. Verify application directory and files exist"
+
+echo "3. Check .env file has all required variables"print_header "DOCKER COMPOSE INFORMATION"
+
+echo "4. Ensure proper file permissions"
+
+echo "5. Review any error messages in logs"if command -v docker-compose &> /dev/null; then    echo "❌ Docker Compose v2 not found"
+
+echo ""
+
+print_status "Debug script completed successfully"    print_status "Docker Compose is installed"
 
     echo "Docker Compose Version: $(docker-compose --version)"# Docker Informationfi
 
