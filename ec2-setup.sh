@@ -2,154 +2,297 @@
 
 
 
-echo "=== EC2 System Setup Script ==="echo "=== EC2 Firefly Setup Script ==="
+echo "=== EC2 System Setup Script ==="echo "=== EC2 System Setup Script ==="
 
-echo "Installing and configuring required dependencies on EC2"echo "This script will set up Docker and dependencies for Firefly III on EC2"
+echo "Installing and configuring required dependencies on EC2"echo "Installing and configuring required dependencies on EC2"
 
-echo ""
+echo ""echo ""
 
-# Colors for output
 
-RED='\033[0;31m'# Check if running as root
 
-GREEN='\033[0;32m'if [ "$EUID" -eq 0 ]; then
+# Colors for output# Colors for output
+
+RED='\033[0;31m'
+
+GREEN='\033[0;32m'RED='\033[0;31m'# Check if running as root
+
+YELLOW='\033[1;33m'
+
+BLUE='\033[0;34m'GREEN='\033[0;32m'if [ "$EUID" -eq 0 ]; then
+
+NC='\033[0m' # No Color
 
 YELLOW='\033[1;33m'    echo "⚠️  Running as root. This is generally not recommended."
 
-NC='\033[0m' # No Color    echo "Consider running as a regular user with sudo privileges."
+# Function to print status messages
 
-fi
+print_status() {NC='\033[0m' # No Color    echo "Consider running as a regular user with sudo privileges."
 
-log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
 
-    echo -e "${GREEN}[INFO]${NC} $1"# Function to detect OS
-
-}detect_os() {
-
-    if [ -f /etc/os-release ]; then
-
-log_warn() {        . /etc/os-release
-
-    echo -e "${YELLOW}[WARN]${NC} $1"        OS=$NAME
-
-}        VER=$VERSION_ID
-
-    elif type lsb_release >/dev/null 2>&1; then
-
-log_error() {        OS=$(lsb_release -si)
-
-    echo -e "${RED}[ERROR]${NC} $1"        VER=$(lsb_release -sr)
-
-}    elif [ -f /etc/lsb-release ]; then
-
-        . /etc/lsb-release
-
-# Update system packages        OS=$DISTRIB_ID
-
-update_system() {        VER=$DISTRIB_RELEASE
-
-    log_info "Updating system packages..."    else
-
-            OS=$(uname -s)
-
-    # Detect OS        VER=$(uname -r)
-
-    if command -v apt-get &> /dev/null; then    fi
-
-        # Ubuntu/Debian    echo "Detected OS: $OS $VER"
-
-        sudo apt-get update -y}
-
-        sudo apt-get upgrade -y
-
-        sudo apt-get install -y curl wget git unzip# Install Docker on Ubuntu/Debian
-
-    elif command -v yum &> /dev/null; theninstall_docker_ubuntu() {
-
-        # Amazon Linux/CentOS    echo "Installing Docker on Ubuntu/Debian..."
-
-        sudo yum update -y    
-
-        sudo yum install -y curl wget git unzip    # Update package index
-
-    else    sudo apt-get update
-
-        log_warn "Unknown package manager, skipping system update"    
-
-    fi    # Install packages to allow apt to use a repository over HTTPS
-
-}    sudo apt-get install -y \
-
-        apt-transport-https \
-
-# Install Docker if not present        ca-certificates \
-
-install_docker() {        curl \
-
-    if command -v docker &> /dev/null; then        gnupg \
-
-        log_info "Docker already installed: $(docker --version)"        lsb-release
-
-        return 0
-
-    fi    # Add Docker's official GPG key
-
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-
-    log_info "Installing Docker..."
-
-        # Set up the stable repository
-
-    # Install Docker using the official script    echo \
-
-    curl -fsSL https://get.docker.com -o get-docker.sh        "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
-
-    sudo sh get-docker.sh        $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-    
-
-    # Add current user to docker group    # Update package index again
-
-    sudo usermod -aG docker $USER    sudo apt-get update
-
-    
-
-    # Start Docker service    # Install Docker Engine
-
-    sudo systemctl start docker    sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-
-    sudo systemctl enable docker
-
-        # Start and enable Docker
-
-    log_info "Docker installed successfully"    sudo systemctl start docker
-
-}    sudo systemctl enable docker
+}fi
 
 
 
-# Install Docker Compose if not present    # Add current user to docker group
+print_success() {log_info() {
 
-install_docker_compose() {    sudo usermod -aG docker $USER
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
 
-    if command -v docker-compose &> /dev/null; then    
+}    echo -e "${GREEN}[INFO]${NC} $1"# Function to detect OS
 
-        log_info "Docker Compose already installed: $(docker-compose --version)"    echo "✅ Docker installed successfully"
 
-        return 0}
+
+print_warning() {}detect_os() {
+
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+
+}    if [ -f /etc/os-release ]; then
+
+
+
+print_error() {log_warn() {        . /etc/os-release
+
+    echo -e "${RED}[ERROR]${NC} $1"
+
+}    echo -e "${YELLOW}[WARN]${NC} $1"        OS=$NAME
+
+
+
+# Function to check if command succeeded}        VER=$VERSION_ID
+
+check_command() {
+
+    if [ $? -eq 0 ]; then    elif type lsb_release >/dev/null 2>&1; then
+
+        print_success "$1"
+
+    elselog_error() {        OS=$(lsb_release -si)
+
+        print_error "$2"
+
+        exit 1    echo -e "${RED}[ERROR]${NC} $1"        VER=$(lsb_release -sr)
 
     fi
 
-    # Install Docker on Amazon Linux 2
+}}    elif [ -f /etc/lsb-release ]; then
 
-    log_info "Installing Docker Compose..."install_docker_amazon_linux() {
 
-        echo "Installing Docker on Amazon Linux..."
 
-    # Get latest version    
+print_status "Starting EC2 system setup..."        . /etc/lsb-release
 
-    local latest_version=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep tag_name | cut -d '"' -f 4)    # Update packages
 
+
+# Update system packages# Update system packages        OS=$DISTRIB_ID
+
+print_status "Updating system packages..."
+
+sudo yum update -yupdate_system() {        VER=$DISTRIB_RELEASE
+
+check_command "System packages updated successfully" "Failed to update system packages"
+
+    log_info "Updating system packages..."    else
+
+# Install Docker
+
+print_status "Installing Docker..."            OS=$(uname -s)
+
+sudo yum install -y docker
+
+check_command "Docker installed successfully" "Failed to install Docker"    # Detect OS        VER=$(uname -r)
+
+
+
+# Start and enable Docker service    if command -v apt-get &> /dev/null; then    fi
+
+print_status "Starting Docker service..."
+
+sudo systemctl start docker        # Ubuntu/Debian    echo "Detected OS: $OS $VER"
+
+check_command "Docker service started" "Failed to start Docker service"
+
+        sudo apt-get update -y}
+
+sudo systemctl enable docker
+
+check_command "Docker service enabled for auto-start" "Failed to enable Docker service"        sudo apt-get upgrade -y
+
+
+
+# Add ec2-user to docker group        sudo apt-get install -y curl wget git unzip# Install Docker on Ubuntu/Debian
+
+print_status "Adding ec2-user to docker group..."
+
+sudo usermod -a -G docker ec2-user    elif command -v yum &> /dev/null; theninstall_docker_ubuntu() {
+
+check_command "User added to docker group" "Failed to add user to docker group"
+
+        # Amazon Linux/CentOS    echo "Installing Docker on Ubuntu/Debian..."
+
+# Install Docker Compose
+
+print_status "Installing Docker Compose..."        sudo yum update -y    
+
+sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+
+check_command "Docker Compose downloaded" "Failed to download Docker Compose"        sudo yum install -y curl wget git unzip    # Update package index
+
+
+
+sudo chmod +x /usr/local/bin/docker-compose    else    sudo apt-get update
+
+check_command "Docker Compose made executable" "Failed to make Docker Compose executable"
+
+        log_warn "Unknown package manager, skipping system update"    
+
+# Verify installations
+
+print_status "Verifying installations..."    fi    # Install packages to allow apt to use a repository over HTTPS
+
+docker --version
+
+check_command "Docker version check passed" "Docker installation verification failed"}    sudo apt-get install -y \
+
+
+
+docker-compose --version        apt-transport-https \
+
+check_command "Docker Compose version check passed" "Docker Compose installation verification failed"
+
+# Install Docker if not present        ca-certificates \
+
+# Install git (if not already installed)
+
+print_status "Installing Git..."install_docker() {        curl \
+
+sudo yum install -y git
+
+check_command "Git installed successfully" "Failed to install Git"    if command -v docker &> /dev/null; then        gnupg \
+
+
+
+# Install unzip (useful for extracting files)        log_info "Docker already installed: $(docker --version)"        lsb-release
+
+print_status "Installing unzip utility..."
+
+sudo yum install -y unzip        return 0
+
+check_command "Unzip installed successfully" "Failed to install unzip"
+
+    fi    # Add Docker's official GPG key
+
+# Create necessary directories
+
+print_status "Creating application directories..."        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+
+mkdir -p /home/ec2-user/firefly-ai
+
+check_command "Application directory created" "Failed to create application directory"    log_info "Installing Docker..."
+
+
+
+# Set proper permissions        # Set up the stable repository
+
+print_status "Setting directory permissions..."
+
+sudo chown -R ec2-user:ec2-user /home/ec2-user/firefly-ai    # Install Docker using the official script    echo \
+
+check_command "Directory permissions set" "Failed to set directory permissions"
+
+    curl -fsSL https://get.docker.com -o get-docker.sh        "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
+
+# Create .env file with default values
+
+print_status "Creating default .env file..."    sudo sh get-docker.sh        $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+cat > /home/ec2-user/firefly-ai/.env << 'EOF'
+
+# Database Configuration    
+
+POSTGRES_DB=firefly
+
+POSTGRES_USER=firefly    # Add current user to docker group    # Update package index again
+
+POSTGRES_PASSWORD=firefly123
+
+DB_CONNECTION=pgsql    sudo usermod -aG docker $USER    sudo apt-get update
+
+DB_HOST=db
+
+DB_PORT=5432    
+
+DB_DATABASE=firefly
+
+DB_USERNAME=firefly    # Start Docker service    # Install Docker Engine
+
+DB_PASSWORD=firefly123
+
+    sudo systemctl start docker    sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+# Firefly III Configuration
+
+APP_KEY=SomeRandomStringOf32CharsExactly    sudo systemctl enable docker
+
+SITE_OWNER=admin@example.com
+
+APP_URL=http://localhost        # Start and enable Docker
+
+TRUSTED_PROXIES=**
+
+    log_info "Docker installed successfully"    sudo systemctl start docker
+
+# AI Service Configuration
+
+OPENAI_API_KEY=your-openai-api-key-here}    sudo systemctl enable docker
+
+AI_SERVICE_URL=http://firefly-ai-categorizer:8000
+
+
+
+# Webhook Configuration
+
+WEBHOOK_URL=http://webhook_service:5000/webhook# Install Docker Compose if not present    # Add current user to docker group
+
+EOF
+
+check_command "Default .env file created" "Failed to create .env file"install_docker_compose() {    sudo usermod -aG docker $USER
+
+
+
+print_success "EC2 system setup completed successfully!"    if command -v docker-compose &> /dev/null; then    
+
+print_status "System is ready for Firefly III deployment"
+
+print_warning "Remember to:"        log_info "Docker Compose already installed: $(docker-compose --version)"    echo "✅ Docker installed successfully"
+
+print_warning "1. Update OPENAI_API_KEY in .env file"
+
+print_warning "2. Update APP_URL with your actual domain/IP"        return 0}
+
+print_warning "3. Generate a new APP_KEY for security"
+
+print_warning "4. Log out and back in for docker group changes to take effect"    fi
+
+
+
+echo ""    # Install Docker on Amazon Linux 2
+
+print_status "Setup Summary:"
+
+echo "  ✓ System packages updated"    log_info "Installing Docker Compose..."install_docker_amazon_linux() {
+
+echo "  ✓ Docker installed and configured"
+
+echo "  ✓ Docker Compose installed"        echo "Installing Docker on Amazon Linux..."
+
+echo "  ✓ Git installed"
+
+echo "  ✓ Application directories created"    # Get latest version    
+
+echo "  ✓ Default .env file created"
+
+echo ""    local latest_version=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep tag_name | cut -d '"' -f 4)    # Update packages
+
+print_success "EC2 setup complete! Ready for application deployment."
         sudo yum update -y
 
     # Install Docker Compose    
