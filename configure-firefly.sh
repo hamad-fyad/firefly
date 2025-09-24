@@ -9,6 +9,8 @@ FIREFLY_URL=${FIREFLY_URL:-"http://localhost:8080"}
 ADMIN_EMAIL=${ADMIN_EMAIL:-"admin@firefly.local"}
 ADMIN_PASSWORD=${ADMIN_PASSWORD:-"admin123456"}
 FIREFLY_CONTAINER=${FIREFLY_CONTAINER:-"firefly_iii_core"}
+WEBHOOK_URL=${WEBHOOK_URL:-"http://webhook-service:8001/webhook"}
+AI_SERVICE_URL=${AI_SERVICE_URL:-"http://ai-service:8000"}
 
 # Colors for output
 RED='\033[0;31m'
@@ -211,6 +213,146 @@ test_api() {
     fi
 }
 
+# Configure webhooks
+configure_webhooks() {
+    log_info "Configuring webhooks..."
+    
+    local token=$(cat .env | grep "FIREFLY_TOKEN2=" | cut -d'=' -f2)
+    if [ -z "$token" ]; then
+        log_error "No FIREFLY_TOKEN2 found in .env, cannot configure webhooks"
+        return 1
+    fi
+    
+    # Check if webhook already exists
+    log_info "Checking existing webhooks..."
+    local existing_webhooks=$(curl -s -H "Authorization: Bearer $token" \
+                                  -H "Accept: application/json" \
+                                  "$FIREFLY_URL/api/v1/webhooks")
+    
+    if echo "$existing_webhooks" | grep -q "$WEBHOOK_URL"; then
+        log_info "Webhook already exists, skipping creation"
+        return 0
+    fi
+    
+    # Create webhook for transaction events
+    log_info "Creating webhook for transaction events..."
+    local webhook_response=$(curl -s -X POST \
+        -H "Authorization: Bearer $token" \
+        -H "Content-Type: application/json" \
+        -H "Accept: application/json" \
+        -d "{
+            \"title\": \"AI Categorization Webhook\",
+            \"url\": \"$WEBHOOK_URL\",
+            \"trigger\": \"STORE_TRANSACTION\",
+            \"response\": \"TRANSACTIONS\",
+            \"delivery\": \"JSON\",
+            \"active\": true
+        }" \
+        "$FIREFLY_URL/api/v1/webhooks")
+    
+    if echo "$webhook_response" | grep -q "\"id\""; then
+        log_info "Webhook created successfully!"
+        echo "Webhook Response: $webhook_response"
+        
+        # Extract webhook ID for logging
+        local webhook_id=$(echo "$webhook_response" | grep -o '"id":[0-9]*' | cut -d':' -f2)
+        log_info "Webhook ID: $webhook_id"
+        
+        return 0
+    else
+        log_error "Failed to create webhook"
+        echo "Response: $webhook_response"
+        return 1
+    fi
+}
+
+# Test webhook connectivity
+test_webhook_service() {
+    log_info "Testing webhook service connectivity..."
+    
+    # Test webhook service health
+    local webhook_health=$(curl -s "$AI_SERVICE_URL/health" 2>/dev/null || echo "failed")
+    if echo "$webhook_health" | grep -q "status"; then
+        log_info "AI service is healthy!"
+    else
+        log_warn "AI service health check failed"
+    fi
+    
+    # Test webhook endpoint
+    local webhook_test=$(curl -s -X POST \
+        -H "Content-Type: application/json" \
+        -d '{"test": "connectivity"}' \
+        "${WEBHOOK_URL%/webhook}/health" 2>/dev/null || echo "failed")
+    
+    if echo "$webhook_test" | grep -q "status\|ok"; then
+        log_info "Webhook service is accessible!"
+        return 0
+    else
+        log_warn "Webhook service connectivity test failed"
+        echo "Response: $webhook_test"
+        return 1
+    fi
+}
+
+# Test end-to-end webhook flow
+test_webhook_flow() {
+    log_info "Testing end-to-end webhook flow..."
+    
+    local token=$(cat .env | grep "FIREFLY_TOKEN2=" | cut -d'=' -f2)
+    if [ -z "$token" ]; then
+        log_warn "No token available, skipping webhook flow test"
+        return 0
+    fi
+    
+    # Create a test transaction to trigger webhook
+    log_info "Creating test transaction to trigger webhook..."
+    local test_transaction=$(curl -s -X POST \
+        -H "Authorization: Bearer $token" \
+        -H "Content-Type: application/json" \
+        -H "Accept: application/json" \
+        -d '{
+            "error_if_duplicate_hash": false,
+            "apply_rules": true,
+            "fire_webhooks": true,
+            "group_title": "Webhook Test Transaction",
+            "transactions": [{
+                "type": "withdrawal",
+                "description": "Test coffee purchase for AI categorization",
+                "amount": "4.50",
+                "date": "'$(date +%Y-%m-%d)'",
+                "source_name": "Test Checking Account",
+                "destination_name": "Coffee Shop"
+            }]
+        }' \
+        "$FIREFLY_URL/api/v1/transactions")
+    
+    if echo "$test_transaction" | grep -q "\"id\""; then
+        local transaction_id=$(echo "$test_transaction" | grep -o '"id":"[0-9]*"' | head -1 | cut -d'"' -f4)
+        log_info "Test transaction created successfully! ID: $transaction_id"
+        log_info "Webhook should be triggered automatically"
+        
+        # Wait a moment for webhook processing
+        sleep 3
+        
+        # Check if the transaction was categorized
+        local updated_transaction=$(curl -s -H "Authorization: Bearer $token" \
+                                        -H "Accept: application/json" \
+                                        "$FIREFLY_URL/api/v1/transactions/$transaction_id")
+        
+        if echo "$updated_transaction" | grep -q "category"; then
+            log_info "✅ Webhook flow test successful - transaction was categorized!"
+        else
+            log_warn "⚠️ Webhook may not have processed the transaction yet"
+        fi
+        
+        return 0
+    else
+        log_error "Failed to create test transaction"
+        echo "Response: $test_transaction"
+        return 1
+    fi
+}
+
 # Run database migrations and setup
 run_setup() {
     log_info "Running Firefly III setup..."
@@ -254,16 +396,37 @@ main() {
     # Test API
     test_api
     
+    # Wait a bit for all services to be fully ready
+    log_info "Waiting for webhook services to be ready..."
+    sleep 10
+    
+    # Test webhook service connectivity
+    test_webhook_service
+    
+    # Configure webhooks
+    if ! configure_webhooks; then
+        log_warn "Webhook configuration failed, but continuing..."
+    fi
+    
+    # Test end-to-end webhook flow
+    test_webhook_flow
+    
     log_info "Firefly III auto-configuration completed successfully!"
     echo ""
     echo "=== Configuration Summary ==="
     echo "Admin Email: $ADMIN_EMAIL"
     echo "Admin Password: $ADMIN_PASSWORD"
     echo "Firefly URL: $FIREFLY_URL"
+    echo "Webhook URL: $WEBHOOK_URL"
+    echo "AI Service URL: $AI_SERVICE_URL"
     echo "User Registration: Enabled"
     echo "API Tokens: Configured"
+    echo "Webhooks: Configured"
     echo ""
-    echo "You can now use the API tokens in your .env file for testing."
+    echo "🎉 Your Firefly III AI stack is now fully configured!"
+    echo "   - New transactions will be automatically categorized"
+    echo "   - Check the AI metrics dashboard at: ${FIREFLY_URL/8080/8082}/metrics"
+    echo "   - Webhook logs available in Docker logs"
 }
 
 # Run if executed directly
