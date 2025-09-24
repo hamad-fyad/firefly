@@ -271,11 +271,18 @@ jobs:
         run: |
           echo "🚀 Starting deployment to EC2..."
           
-          # Ensure all shell scripts have Unix line endings before transfer
-          find deployment -name "*.sh" -print0 | xargs -0 sed -i 's/\r$//' 2>/dev/null || true
-          
-          # Make scripts executable before transfer
-          find deployment -name "*.sh" -exec chmod +x {} \;
+          # Ensure all shell scripts have proper Unix line endings and are executable
+          for script in deployment/*.sh; do
+            if [ -f "$script" ]; then
+              # Convert any line endings to Unix format
+              sed -i 's/\r$//' "$script" 2>/dev/null || true
+              # Remove any null bytes that might cause issues
+              tr -d '\000' < "$script" > "${script}.tmp" && mv "${script}.tmp" "$script"
+              # Make executable
+              chmod +x "$script"
+              echo "Processed: $(basename "$script")"
+            fi
+          done
           
           # Copy files to EC2
           scp -i ~/.ssh/id_rsa -r deployment/* ${{ env.AWS_EC2_USER }}@${{ env.AWS_EC2_HOST }}:~/firefly/
@@ -310,7 +317,7 @@ jobs:
             # Run setup with explicit bash interpreter and full path
             if [ -f ec2-setup.sh ]; then
               echo "Running ec2-setup.sh with bash interpreter..."
-              /bin/bash ./ec2-setup.sh
+              /bin/bash ec2-setup.sh
             else
               echo "⚠️ ec2-setup.sh not found, running inline setup..."
               # Inline setup as fallback
@@ -374,7 +381,7 @@ jobs:
             # Run configuration with explicit bash interpreter and full path
             if [ -f configure-firefly.sh ]; then
               echo "Running configure-firefly.sh with bash interpreter..."
-              /bin/bash ./configure-firefly.sh
+              /bin/bash configure-firefly.sh
             else
               echo "⚠️ configure-firefly.sh not found, skipping configuration"
             fi
