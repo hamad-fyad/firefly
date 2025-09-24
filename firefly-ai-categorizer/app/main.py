@@ -9,8 +9,7 @@ import dotenv, os
 app = FastAPI()
 dotenv.load_dotenv()
 FIREFFLY_API = "http://app:8080/api/v1"
-# Use FIREFLY_TOKEN2 if available, fallback to FIREFLY_TOKEN
-FIREFFLY_TOKEN = os.environ.get("FIREFLY_TOKEN2", os.environ.get("FIREFLY_TOKEN", "your_firefly_token"))
+FIREFFLY_TOKEN = os.environ.get("FIREFLY_TOKEN")
 HEADERS = {"Authorization": f"Bearer {FIREFFLY_TOKEN}"}
 
 
