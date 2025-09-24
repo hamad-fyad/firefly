@@ -5,7 +5,7 @@ import httpx
 from app.ai_model import predict_category, retrain_model
 from app.feedback_storage import save_feedback
 from app.model_metrics import get_model_performance_summary, get_predictions_data
-import dotenv, os, time
+import dotenv, os
 app = FastAPI()
 dotenv.load_dotenv()
 FIREFFLY_API = "http://app:8080/api/v1"
@@ -46,8 +46,11 @@ async def health_check():
         return {"status": "healthy", "model_status": model_status, "model_type": model_type}
         
     except Exception as e:
-        return {"status": "error", "model_status": "unknown", "error": str(e)}
-
+        return {
+            "status": "healthy",  # Still healthy even without model
+            "model_status": "error",
+            "detail": str(e)
+        }
 
 @app.post("/incoming")
 async def incoming_event(request: Request):
@@ -62,15 +65,11 @@ async def incoming_event(request: Request):
     tx_id = transactions[0]["transaction_journal_id"]
     tx_desc = transactions[0]["description"]
 
-    try:
-        ai_category = predict_category(tx_desc)
-        
-        # Get confidence from prediction if available
-        confidence = 0.85  # Default confidence for successful predictions
-        
-    except Exception as e:
-        print(f"No model available")
-        return JSONResponse(status_code=200, content={"status": "no_model", "category": "Uncategorized", "detail": str(e)})
+    # predict_category now handles all fallbacks internally and never raises exceptions
+    ai_category = predict_category(tx_desc)
+    confidence = 0.85  # Default confidence for successful predictions
+    
+    print(f"✅ Transaction categorized: '{tx_desc}' -> '{ai_category}'")
 
     async with httpx.AsyncClient() as client:
         try:
@@ -153,130 +152,6 @@ async def test_categorize(request: Request):
         return {"description": description, "predicted_category": category, "source": "ai_service"}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
-
-
-@app.get("/status")
-async def model_status():
-    """User-friendly model status endpoint."""
-    try:
-        from app.ai_model import get_openai_client, fallback_categorization
-        import os
-        
-        client = get_openai_client()
-        api_key_set = bool(os.environ.get("OPENAI_API_KEY"))
-        
-        status = {
-            "service": "AI Transaction Categorizer",
-            "timestamp": time.time(),
-            "model_info": {}
-        }
-        
-        if not api_key_set:
-            status["model_info"] = {
-                "type": "keyword_based",
-                "status": "active",
-                "message": "Using fast keyword-based categorization",
-                "accuracy": "Good for common transactions",
-                "cost": "Free"
-            }
-        elif client:
-            try:
-                # Quick OpenAI test
-                response = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[{"role": "user", "content": "test"}],
-                    max_tokens=3,
-                    timeout=5
-                )
-                status["model_info"] = {
-                    "type": "openai_gpt",
-                    "status": "active", 
-                    "message": "Using OpenAI GPT-3.5 for advanced categorization",
-                    "accuracy": "Excellent for all transaction types",
-                    "cost": "Pay-per-use"
-                }
-            except Exception as e:
-                if "insufficient_quota" in str(e) or "429" in str(e):
-                    status["model_info"] = {
-                        "type": "keyword_based",
-                        "status": "fallback_active",
-                        "message": "OpenAI quota exceeded - using keyword fallback",
-                        "accuracy": "Good for common transactions", 
-                        "cost": "Free",
-                        "note": "Add OpenAI credits to restore advanced AI categorization"
-                    }
-                else:
-                    status["model_info"] = {
-                        "type": "keyword_based",
-                        "status": "fallback_active",
-                        "message": f"OpenAI error - using keyword fallback: {str(e)[:50]}",
-                        "accuracy": "Good for common transactions",
-                        "cost": "Free"
-                    }
-        
-        # Test current categorization
-        test_result = fallback_categorization("grocery store purchase")
-        status["test_categorization"] = {
-            "input": "grocery store purchase",
-            "output": test_result,
-            "working": test_result == "Food & Drink"
-        }
-        
-        return status
-        
-    except Exception as e:
-        return {"error": str(e), "service": "AI Transaction Categorizer", "status": "error"}
-
-
-@app.get("/debug")
-async def debug_info():
-    """Debug endpoint to check OpenAI status and environment."""
-    import os
-    from app.ai_model import get_openai_client, fallback_categorization
-    
-    try:
-        # Check OpenAI configuration
-        api_key = os.environ.get("OPENAI_API_KEY")
-        client = get_openai_client()
-        
-        # Test fallback
-        fallback_test = fallback_categorization("grocery store purchase")
-        
-        debug_info = {
-            "openai_api_key_configured": bool(api_key),
-            "openai_api_key_length": len(api_key) if api_key else 0,
-            "openai_client_available": client is not None,
-            "fallback_test": {
-                "input": "grocery store purchase",
-                "output": fallback_test
-            },
-            "environment_vars": {
-                "OPENAI_API_KEY": "***" if api_key else "NOT_SET",
-                "FIREFLY_TOKEN": "***" if os.environ.get("FIREFLY_TOKEN") else "NOT_SET"
-            }
-        }
-        
-        # Test OpenAI if available
-        if client:
-            try:
-                response = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[{"role": "user", "content": "Say 'test'"}],
-                    max_tokens=5,
-                    timeout=5
-                )
-                debug_info["openai_test"] = "SUCCESS"
-                debug_info["openai_response"] = response.choices[0].message.content
-            except Exception as e:
-                debug_info["openai_test"] = "FAILED"
-                debug_info["openai_error"] = str(e)
-        else:
-            debug_info["openai_test"] = "SKIPPED - No client"
-            
-        return debug_info
-        
-    except Exception as e:
-        return {"error": str(e), "debug_failed": True}
 
 
 @app.get("/metrics", response_class=HTMLResponse)
