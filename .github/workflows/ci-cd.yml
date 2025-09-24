@@ -370,7 +370,15 @@ jobs:
             max_attempts=60
             attempt=0
             while [ $attempt -lt $max_attempts ]; do
-              if docker compose exec -T db mysql -u admin -padmin -e "SELECT 1" >/dev/null 2>&1; then
+              # Check if database container is running and healthy
+              if docker compose ps db | grep -q "Up.*healthy\|Up.*running" && \
+                 docker compose logs db 2>/dev/null | grep -q "ready for connections\|mysqld: ready for connections"; then
+                echo "✅ Database is ready!"
+                break
+              elif docker compose exec -T db mariadb -u admin -padmin -e "SELECT 1" >/dev/null 2>&1; then
+                echo "✅ Database is ready!"
+                break
+              elif docker compose exec -T db mysqladmin ping -u admin -padmin >/dev/null 2>&1; then
                 echo "✅ Database is ready!"
                 break
               fi
@@ -378,6 +386,14 @@ jobs:
               sleep 2
               attempt=$((attempt + 1))
             done
+            
+            if [ $attempt -eq $max_attempts ]; then
+              echo "⚠️ Database readiness check timed out after 2 minutes, continuing anyway..."
+              echo "📋 Database container status:"
+              docker compose ps db || echo "Failed to get DB status"
+              echo "📋 Database logs (last 10 lines):"
+              docker compose logs --tail=10 db || echo "Failed to get DB logs"
+            fi
             
             # Wait a bit more for Firefly to initialize
             echo "🔍 Waiting for Firefly III to be ready..."
