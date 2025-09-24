@@ -132,8 +132,10 @@ jobs:
       - name: 🔧 Setup SSH
         run: |
           mkdir -p ~/.ssh
+          # Write the private key from the secret, preserving line breaks
           echo "${{ secrets.AWS_EC2_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
+          # Add EC2 host to known_hosts to avoid prompt
           ssh-keyscan -H ${{ secrets.AWS_EC2_HOST }} >> ~/.ssh/known_hosts
 
       - name: 📋 Prepare Deployment Files
