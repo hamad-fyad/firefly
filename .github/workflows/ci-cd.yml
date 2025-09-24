@@ -135,9 +135,24 @@ jobs:
   deploy-to-ec2:
     runs-on: ubuntu-latest
     needs: build-and-push
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/intgrate_with_chatgpt' || github.event.inputs.force_deploy == 'true'
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/intgrate_with_chatgpt' || github.event.inputs.force_deploy == 'true') && needs.build-and-push.result == 'success'
     
     steps:
+      - name: 🐛 Debug Deploy Conditions
+        run: |
+          echo "🔍 Debugging deployment conditions:"
+          echo "Current ref: ${{ github.ref }}"
+          echo "Event name: ${{ github.event_name }}"
+          echo "Force deploy: ${{ github.event.inputs.force_deploy }}"
+          echo "Build job result: ${{ needs.build-and-push.result }}"
+          echo "Build job success: ${{ needs.build-and-push.result == 'success' }}"
+          echo ""
+          echo "🔑 Checking secrets availability:"
+          echo "AWS_EC2_HOST: ${{ secrets.AWS_EC2_HOST != '' }}"
+          echo "AWS_EC2_USER: ${{ secrets.AWS_EC2_USER != '' }}"
+          echo "AWS_EC2_KEY: ${{ secrets.AWS_EC2_PRIVATE_KEY != '' }}"
+          echo "DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME != '' }}"
+          echo "DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD != '' }}"
       - name: 📥 Checkout Code
         uses: actions/checkout@v4
 
@@ -285,6 +300,13 @@ jobs:
     if: always() && needs.deploy-to-ec2.result == 'success'
     
     steps:
+      - name: 🐛 Debug Validation Conditions
+        run: |
+          echo "🔍 Debugging validation conditions:"
+          echo "Deploy job result: ${{ needs.deploy-to-ec2.result }}"
+          echo "Deploy job success: ${{ needs.deploy-to-ec2.result == 'success' }}"
+          echo "Build job result: ${{ needs.build-and-push.result }}"
+          echo "Always condition: true"
       - name: 📥 Checkout Code
         uses: actions/checkout@v4
 

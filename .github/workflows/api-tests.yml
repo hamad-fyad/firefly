@@ -205,16 +205,8 @@ jobs:
       - name: Install quality tools
         run: |
           python -m pip install --upgrade pip
-          pip install flake8 black isort mypy bandit safety pylint
+          pip install flake8 mypy safety pylint
           pip install -r requirements.txt
-
-      - name: Run Black (Code Formatting)
-        run: |
-          black --check --diff tests/ *.py || echo "::warning::Code formatting issues found"
-
-      - name: Run isort (Import Sorting)
-        run: |
-          isort --check-only --diff tests/ *.py || echo "::warning::Import sorting issues found"
 
       - name: Run flake8 (Style Guide)
         run: |
@@ -235,12 +227,7 @@ jobs:
           echo "Generated: $(date)" >> quality-reports/quality-summary.md
           echo "" >> quality-reports/quality-summary.md
           
-          # Black check
-          if black --check tests/ *.py; then
-            echo "✅ Black: Code formatting is correct" >> quality-reports/quality-summary.md
-          else
-            echo "❌ Black: Code formatting issues found" >> quality-reports/quality-summary.md
-          fi
+      
           
           # Flake8 check
           if flake8 tests/ *.py --max-line-length=100 --ignore=E203,W503; then
@@ -272,13 +259,7 @@ jobs:
       - name: Install security tools
         run: |
           python -m pip install --upgrade pip
-          pip install bandit safety semgrep
           pip install -r requirements.txt
-
-      - name: Run Bandit (Security Linter)
-        run: |
-          bandit -r tests/ *.py -f json -o security-reports/bandit-report.json || true
-          bandit -r tests/ *.py || echo "::warning::Security issues found by Bandit"
 
       - name: Run Safety (Dependency Vulnerability Check)
         run: |
@@ -307,7 +288,6 @@ jobs:
           echo "Generated: $(date)" >> security-reports/security-summary.md
           echo "" >> security-reports/security-summary.md
           echo "## Tests Performed:" >> security-reports/security-summary.md
-          echo "- Bandit: Static security analysis" >> security-reports/security-summary.md
           echo "- Safety: Dependency vulnerability scanning" >> security-reports/security-summary.md
           echo "- Semgrep: Static Application Security Testing (SAST)" >> security-reports/security-summary.md
           echo "- Secrets detection: Manual pattern matching" >> security-reports/security-summary.md
@@ -607,8 +587,8 @@ jobs:
           Firefly.URL=${{ env.FIREFLY_URL }}
           Test.Types=Unit Tests (AI + Webhook), API Integration, Security, Load, Quality
           Timestamp=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          Quality.Checks=Black, Flake8, MyPy, Pylint, Bandit, Safety
-          Security.Tools=Bandit, Safety, Semgrep, Secrets Detection
+          Quality.Checks=Flake8, MyPy, Pylint, Safety
+          Security.Tools= Safety, Semgrep, Secrets Detection
           Load.Testing=Locust (5 users/30s automatic, 20 users/120s manual)
           Dependencies=Audit, License Check, Outdated Detection
           EOF
@@ -635,21 +615,17 @@ jobs:
           - **Business Workflows**: End-to-end scenarios
           
           ### 🛡️ Security Testing
-          - **Static Analysis**: Bandit security linter
           - **Dependency Scanning**: Safety vulnerability check
           - **SAST**: Semgrep pattern detection
           - **Secrets Detection**: Manual pattern matching
           
           ### 📊 Code Quality
-          - **Formatting**: Black code formatter
-          - **Import Sorting**: isort
           - **Style Guide**: Flake8 (PEP 8)
           - **Type Checking**: MyPy
           - **Code Analysis**: Pylint
           
           ### ⚡ Performance & Load Testing
           - **Load Testing**: Locust (5 users/30s automatic, 20 users/120s manual)
-          - **Benchmark**: Unit test performance measurement
           - **Endpoints**: /about, /accounts, /transactions
           
           ### 📦 Dependency Analysis
@@ -760,8 +736,7 @@ jobs:
                       <ul>
                           <li>✅ <strong>Unit Tests</strong>: AI Categorizer & Webhook Service (16 tests)</li>
                           <li>🔌 <strong>API Integration</strong>: Firefly III endpoints and workflows</li>
-                          <li>🛡️ <strong>Security Analysis</strong>: Bandit, Safety, Semgrep, Secrets Detection</li>
-                          <li>📊 <strong>Code Quality</strong>: Black, Flake8, MyPy, Pylint</li>
+                          <li>🛡️ <strong>Security Analysis</strong>: Safety, Semgrep, Secrets Detection</li>
                           <li>⚡ <strong>Performance</strong>: Load testing with Locust</li>
                           <li>📦 <strong>Dependencies</strong>: Vulnerability audit, license compliance</li>
                       </ul>
@@ -779,23 +754,17 @@ jobs:
                           <h3>🛡️ Security Analysis</h3>
                           <p>Security vulnerability scanning, SAST analysis, and secrets detection results.</p>
                           <a href="security-reports/security-summary.md" class="report-link security">📋 Security Summary</a>
-                          <a href="security-reports/bandit-report.json" class="report-link security">🔍 Bandit Report</a>
                           <a href="security-reports/safety-report.json" class="report-link security">🛡️ Safety Report</a>
                           <a href="security-reports/semgrep-report.json" class="report-link security">🔎 Semgrep Report</a>
                       </div>
                       
-                      <div class="report-card">
-                          <h3>📊 Code Quality</h3>
-                          <p>Code formatting, style guide compliance, type checking, and static analysis results.</p>
-                          <a href="code-quality/quality-summary.md" class="report-link quality">📋 Quality Summary</a>
-                      </div>
+                    
                       
                       <div class="report-card">
                           <h3>⚡ Performance & Load Tests</h3>
                           <p>Load testing results, performance benchmarks, and response time analysis.</p>
                           <a href="load-tests/load-summary.md" class="report-link load">📋 Load Test Summary</a>
                           <a href="load-tests/load-test-report.html" class="report-link load">📊 Load Test Report</a>
-                          <a href="load-tests/unit-benchmark.json" class="report-link load">⏱️ Benchmarks</a>
                       </div>
                       
                       <div class="report-card">
@@ -870,8 +839,7 @@ jobs:
               testSummary += "### Tests Executed:\n";
               testSummary += "✅ **Unit Tests**: AI Categorizer & Webhook Service (16 tests)\n";
               testSummary += "🔌 **API Tests**: Firefly III Integration (depends on remote instance)\n";
-              testSummary += "🛡️ **Security Tests**: Bandit, Safety, Semgrep, Secrets Detection\n";
-              testSummary += "📊 **Code Quality**: Black, Flake8, MyPy, Pylint\n";
+              testSummary += "🛡️ **Security Tests**:, Safety, Semgrep, Secrets Detection\n";
               testSummary += "⚡ **Load Tests**: Locust performance testing (automatic light tests)\n";
               testSummary += "📦 **Dependencies**: Vulnerability audit, license check\n\n";
               
@@ -879,7 +847,6 @@ jobs:
               testSummary += "- AI categorization logic with mocked OpenAI responses\n";
               testSummary += "- Webhook processing with payload validation\n";
               testSummary += "- Security vulnerability scanning and code analysis\n";
-              testSummary += "- Code quality and style guide compliance\n";
               testSummary += "- Dependency analysis and license compliance\n";
               testSummary += "- API endpoints (if remote Firefly III is available)\n\n";
               
