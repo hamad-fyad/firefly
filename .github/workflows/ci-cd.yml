@@ -288,9 +288,14 @@ jobs:
           scp -i ~/.ssh/id_rsa -r deployment/* ${{ env.AWS_EC2_USER }}@${{ env.AWS_EC2_HOST }}:~/firefly/
           
           # Execute deployment on EC2
-          ssh -i ~/.ssh/id_rsa ${{ env.AWS_EC2_USER }}@${{ env.AWS_EC2_HOST }} << 'EOF'
+          ssh -i ~/.ssh/id_rsa ${{ env.AWS_EC2_USER }}@${{ env.AWS_EC2_HOST }} << EOF
             set -e
             cd ~/firefly
+            
+            # Set environment variables for this session
+            export DOCKER_USERNAME="${{ env.DOCKER_USERNAME }}"
+            export AI_SERVICE_TAG="${{ needs.build-and-push.outputs.version }}"
+            export WEBHOOK_SERVICE_TAG="${{ needs.build-and-push.outputs.version }}"
             
             echo "� Debugging file presence and permissions..."
             ls -la *.sh || echo "No .sh files found"
@@ -359,23 +364,37 @@ jobs:
             docker compose up -d
             
             echo "⏳ Waiting for services to be ready..."
-            # Smart health check instead of fixed sleep
-            max_attempts=30
+            
+            # Wait for database to be ready first
+            echo "🔍 Waiting for database to be ready..."
+            max_attempts=60
             attempt=0
             while [ $attempt -lt $max_attempts ]; do
-              if docker compose ps | grep -q "Up (healthy)\|Up   " && \
-                 curl -f http://localhost:8080/health >/dev/null 2>&1; then
-                echo "✅ Services are ready!"
+              if docker compose exec -T db mysql -u admin -padmin -e "SELECT 1" >/dev/null 2>&1; then
+                echo "✅ Database is ready!"
                 break
               fi
-              echo "🔄 Attempt $((attempt + 1))/$max_attempts - Services not ready yet..."
-              sleep 3
+              echo "🔄 Database attempt $((attempt + 1))/$max_attempts..."
+              sleep 2
               attempt=$((attempt + 1))
             done
             
-            if [ $attempt -eq $max_attempts ]; then
-              echo "⚠️ Services didn't become ready within expected time, continuing anyway..."
-            fi
+            # Wait a bit more for Firefly to initialize
+            echo "🔍 Waiting for Firefly III to be ready..."
+            sleep 15
+            
+            # Check if Firefly is responding
+            attempt=0
+            max_attempts=30
+            while [ $attempt -lt $max_attempts ]; do
+              if curl -f http://localhost:8080 >/dev/null 2>&1; then
+                echo "✅ Firefly III is ready!"
+                break
+              fi
+              echo "🔄 Firefly attempt $((attempt + 1))/$max_attempts..."
+              sleep 3
+              attempt=$((attempt + 1))
+            done
             
             echo "🔧 Configuring Firefly III..."            
             # Run configuration with explicit bash interpreter and full path
