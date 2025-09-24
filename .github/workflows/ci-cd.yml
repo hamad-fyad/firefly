@@ -266,7 +266,20 @@ jobs:
             chmod +x ec2-setup.sh
             ./ec2-setup.sh
             
-            echo "🔄 Pulling base images..."
+            echo "� Debug: Environment variables..."
+            echo "DOCKER_USERNAME: $DOCKER_USERNAME"
+            echo "AI_SERVICE_TAG: $AI_SERVICE_TAG"
+            echo "WEBHOOK_SERVICE_TAG: $WEBHOOK_SERVICE_TAG"
+            
+            echo "🔍 Expected images:"
+            echo "AI: $DOCKER_USERNAME/firefly-ai-categorizer:$AI_SERVICE_TAG"
+            echo "Webhook: $DOCKER_USERNAME/firefly-webhook-service:$WEBHOOK_SERVICE_TAG"
+            
+            echo "�🔄 Pulling specific built images..."
+            docker pull $DOCKER_USERNAME/firefly-ai-categorizer:$AI_SERVICE_TAG || echo "⚠️ AI image pull failed"
+            docker pull $DOCKER_USERNAME/firefly-webhook-service:$WEBHOOK_SERVICE_TAG || echo "⚠️ Webhook image pull failed"
+            
+            echo "🔄 Pulling other base images..."
             docker compose pull app db importer || true
             
             echo "⏹️ Stopping existing services..."
@@ -275,8 +288,8 @@ jobs:
             echo "🗑️ Cleaning up old containers and images..."
             docker system prune -f
             
-            echo "🚀 Building and starting services..."
-            docker compose up -d --build
+            echo "🚀 Starting services..."
+            docker compose up -d
             
             echo "⏳ Waiting for services to be ready..."
             sleep 30
