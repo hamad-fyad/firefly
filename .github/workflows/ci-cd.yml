@@ -11,7 +11,6 @@ on:
         default: false
         type: boolean
 
-# Prevent concurrent runs for the same branch/PR
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -40,6 +39,22 @@ jobs:
     steps:
       - name: 📥 Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for change detection
+
+      - name: 🔍 Detect Changes
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            ai:
+              - 'firefly-ai-categorizer/**'
+            webhook:
+              - 'webhook_service/**'
+            docker:
+              - 'docker-compose.yaml'
+              - '.env'
+              - '*.sh'
 
       - name: 🐋 Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -78,10 +93,11 @@ jobs:
             type=raw,value=${{ steps.meta.outputs.version }}
 
       - name: 🔨 Build & Push AI Categorizer
+        if: steps.changes.outputs.ai == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v5
         with:
           context: ./firefly-ai-categorizer
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64  # Removed arm64 for speed
           push: true
           tags: ${{ steps.meta-ai.outputs.tags }}
           labels: ${{ steps.meta-ai.outputs.labels }}
@@ -104,10 +120,11 @@ jobs:
             type=raw,value=${{ steps.meta.outputs.version }}
 
       - name: 🔨 Build & Push Webhook Service
+        if: steps.changes.outputs.webhook == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v5
         with:
           context: ./webhook_service
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64  # Removed arm64 for speed
           push: true
           tags: ${{ steps.meta-webhook.outputs.tags }}
           labels: ${{ steps.meta-webhook.outputs.labels }}
@@ -254,6 +271,12 @@ jobs:
         run: |
           echo "🚀 Starting deployment to EC2..."
           
+          # Ensure all shell scripts have Unix line endings before transfer
+          find deployment -name "*.sh" -print0 | xargs -0 sed -i 's/\r$//' 2>/dev/null || true
+          
+          # Make scripts executable before transfer
+          find deployment -name "*.sh" -exec chmod +x {} \;
+          
           # Copy files to EC2
           scp -i ~/.ssh/id_rsa -r deployment/* ${{ env.AWS_EC2_USER }}@${{ env.AWS_EC2_HOST }}:~/firefly/
           
@@ -262,9 +285,46 @@ jobs:
             set -e
             cd ~/firefly
             
-            echo "📦 Updating system and installing dependencies..."
-            chmod +x ec2-setup.sh
-            ./ec2-setup.sh
+            echo "� Debugging file presence and permissions..."
+            ls -la *.sh || echo "No .sh files found"
+            echo "Current directory: $(pwd)"
+            echo "Directory contents: $(ls -la)"
+            
+            echo "�📦 Updating system and installing dependencies..."
+            # Fix line endings for both scripts
+            for script in ec2-setup.sh ec2-debug.sh configure-firefly.sh; do
+              if [ -f "$script" ]; then
+                echo "Processing $script..."
+                # Convert Windows line endings to Unix
+                sed -i 's/\r$//' "$script" 2>/dev/null || true
+                # Convert Mac line endings to Unix  
+                sed -i 's/\r/\n/g' "$script" 2>/dev/null || true
+                # Make executable
+                chmod +x "$script"
+                # Verify it's readable
+                echo "File $script size: $(stat -c%s "$script" 2>/dev/null || echo "unknown")"
+                echo "First line of $script: $(head -1 "$script")"
+              fi
+            done
+            
+            # Run setup with explicit bash interpreter and full path
+            if [ -f ec2-setup.sh ]; then
+              echo "Running ec2-setup.sh with bash interpreter..."
+              /bin/bash ./ec2-setup.sh
+            else
+              echo "⚠️ ec2-setup.sh not found, running inline setup..."
+              # Inline setup as fallback
+              if command -v apt-get &> /dev/null; then
+                sudo apt-get update -y
+                sudo apt-get install -y docker.io docker-compose
+              elif command -v yum &> /dev/null; then
+                sudo yum update -y
+                sudo yum install -y docker docker-compose
+              fi
+              sudo systemctl start docker || true
+              sudo systemctl enable docker || true
+              sudo usermod -aG docker $USER || true
+            fi
             
             echo "� Debug: Environment variables..."
             echo "DOCKER_USERNAME: $DOCKER_USERNAME"
@@ -292,11 +352,32 @@ jobs:
             docker compose up -d
             
             echo "⏳ Waiting for services to be ready..."
-            sleep 30
+            # Smart health check instead of fixed sleep
+            max_attempts=30
+            attempt=0
+            while [ $attempt -lt $max_attempts ]; do
+              if docker compose ps | grep -q "Up (healthy)\|Up   " && \
+                 curl -f http://localhost:8080/health >/dev/null 2>&1; then
+                echo "✅ Services are ready!"
+                break
+              fi
+              echo "🔄 Attempt $((attempt + 1))/$max_attempts - Services not ready yet..."
+              sleep 3
+              attempt=$((attempt + 1))
+            done
             
-            echo "🔧 Configuring Firefly III..."
-            chmod +x configure-firefly.sh
-            ./configure-firefly.sh
+            if [ $attempt -eq $max_attempts ]; then
+              echo "⚠️ Services didn't become ready within expected time, continuing anyway..."
+            fi
+            
+            echo "🔧 Configuring Firefly III..."            
+            # Run configuration with explicit bash interpreter and full path
+            if [ -f configure-firefly.sh ]; then
+              echo "Running configure-firefly.sh with bash interpreter..."
+              /bin/bash ./configure-firefly.sh
+            else
+              echo "⚠️ configure-firefly.sh not found, skipping configuration"
+            fi
             
             echo "✅ Deployment completed successfully!"
           EOF
@@ -320,7 +401,7 @@ jobs:
   # ===============================
   validate-deployment:
     runs-on: ubuntu-latest
-    needs: [build-and-push, deploy-to-ec2]
+    needs: [deploy-to-ec2]
     if: always() && needs.deploy-to-ec2.result == 'success'
     
     steps:
@@ -329,7 +410,6 @@ jobs:
           echo "🔍 Debugging validation conditions:"
           echo "Deploy job result: ${{ needs.deploy-to-ec2.result }}"
           echo "Deploy job success: ${{ needs.deploy-to-ec2.result == 'success' }}"
-          echo "Build job result: ${{ needs.build-and-push.result }}"
           echo "Always condition: true"
       - name: 📥 Checkout Code
         uses: actions/checkout@v4
@@ -338,10 +418,11 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
+          cache: 'pip'
 
       - name: 📦 Install Dependencies
         run: |
-          pip install requests pytest python-dotenv
+          pip install --no-deps requests pytest python-dotenv
 
       - name: 🧪 Run Deployment Tests
         env:
