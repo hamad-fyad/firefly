@@ -75,12 +75,33 @@ async def incoming_event(request: Request):
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.get(f"{FIREFFLY_API}/categories", headers=HEADERS)
-            if resp.status_code != 200:
-                return JSONResponse(status_code=500, content={"status": "error", "detail": f"Failed to fetch categories: {resp.status_code}"})
+            if resp.status_code == 302:
+                # Authentication failed - token expired/invalid
+                print(f"⚠️  Firefly III authentication failed (302 redirect). Token may be expired.")
+                return {
+                    "status": "AI category predicted (auth required)", 
+                    "category": ai_category, 
+                    "confidence": confidence,
+                    "message": "Category predicted but Firefly III requires re-authentication. Please check/update the API token."
+                }
+            elif resp.status_code != 200:
+                print(f"⚠️  Firefly III API error {resp.status_code}. Category '{ai_category}' predicted but not applied.")
+                return {
+                    "status": "AI category predicted (API error)", 
+                    "category": ai_category, 
+                    "confidence": confidence,
+                    "message": f"Category predicted but Firefly III API returned {resp.status_code}"
+                }
             
             categories = resp.json()["data"]
         except Exception as e:
-            return JSONResponse(status_code=500, content={"status": "error", "detail": f"API communication error: {str(e)}"})
+            print(f"⚠️  Firefly III connection error: {str(e)}. Category '{ai_category}' predicted but not applied.")
+            return {
+                "status": "AI category predicted (connection error)", 
+                "category": ai_category, 
+                "confidence": confidence,
+                "message": f"Category predicted but connection to Firefly III failed: {str(e)}"
+            }
 
         # Find or create category
         category_id = None
@@ -96,12 +117,25 @@ async def incoming_event(request: Request):
                     headers=HEADERS,
                     json={"name": ai_category}
                 )
-                if create.status_code == 200:
+                if create.status_code in [200, 201]:
                     category_id = create.json()["data"]["id"]
+                    print(f"✅ Created new category '{ai_category}' with ID {category_id}")
                 else:
-                    return JSONResponse(status_code=500, content={"status": "error", "detail": f"Failed to create category: {create.status_code}"})
+                    print(f"⚠️  Failed to create category '{ai_category}' (status {create.status_code})")
+                    return {
+                        "status": "AI category predicted (category creation failed)", 
+                        "category": ai_category, 
+                        "confidence": confidence,
+                        "message": f"Category predicted but creation failed with status {create.status_code}"
+                    }
             except Exception as e:
-                return JSONResponse(status_code=500, content={"status": "error", "detail": f"Failed to create category: {str(e)}"})
+                print(f"⚠️  Exception creating category '{ai_category}': {str(e)}")
+                return {
+                    "status": "AI category predicted (category creation error)", 
+                    "category": ai_category, 
+                    "confidence": confidence,
+                    "message": f"Category predicted but creation failed: {str(e)}"
+                }
 
         # Update the transaction to assign it to the category
         try:
@@ -118,10 +152,25 @@ async def incoming_event(request: Request):
                 headers=HEADERS,
                 json=update_payload
             )
-            if attach_resp.status_code not in [200, 201, 204]:
-                return JSONResponse(status_code=500, content={"status": "error", "detail": f"Failed to update transaction: {attach_resp.status_code}, response: {attach_resp.text}"})
+            if attach_resp.status_code in [200, 201, 204]:
+                print(f"✅ Transaction {tx_id} successfully categorized as '{ai_category}'")
+                return {"status": "AI category assigned", "category": ai_category, "confidence": confidence}
+            else:
+                print(f"⚠️  Failed to update transaction {tx_id} (status {attach_resp.status_code})")
+                return {
+                    "status": "AI category predicted (assignment failed)", 
+                    "category": ai_category, 
+                    "confidence": confidence,
+                    "message": f"Category predicted but assignment failed with status {attach_resp.status_code}"
+                }
         except Exception as e:
-            return JSONResponse(status_code=500, content={"status": "error", "detail": f"Failed to update transaction: {str(e)}"})
+            print(f"⚠️  Exception updating transaction {tx_id}: {str(e)}")
+            return {
+                "status": "AI category predicted (assignment error)", 
+                "category": ai_category, 
+                "confidence": confidence,
+                "message": f"Category predicted but assignment failed: {str(e)}"
+            }
 
     return {"status": "AI category assigned", "category": ai_category, "confidence": confidence}
 
