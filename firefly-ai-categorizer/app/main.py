@@ -140,6 +140,57 @@ async def test_categorize(request: Request):
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
+@app.get("/debug")
+async def debug_info():
+    """Debug endpoint to check OpenAI status and environment."""
+    import os
+    from app.ai_model import get_openai_client, fallback_categorization
+    
+    try:
+        # Check OpenAI configuration
+        api_key = os.environ.get("OPENAI_API_KEY")
+        client = get_openai_client()
+        
+        # Test fallback
+        fallback_test = fallback_categorization("grocery store purchase")
+        
+        debug_info = {
+            "openai_api_key_configured": bool(api_key),
+            "openai_api_key_length": len(api_key) if api_key else 0,
+            "openai_client_available": client is not None,
+            "fallback_test": {
+                "input": "grocery store purchase",
+                "output": fallback_test
+            },
+            "environment_vars": {
+                "OPENAI_API_KEY": "***" if api_key else "NOT_SET",
+                "FIREFLY_TOKEN": "***" if os.environ.get("FIREFLY_TOKEN") else "NOT_SET"
+            }
+        }
+        
+        # Test OpenAI if available
+        if client:
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[{"role": "user", "content": "Say 'test'"}],
+                    max_tokens=5,
+                    timeout=5
+                )
+                debug_info["openai_test"] = "SUCCESS"
+                debug_info["openai_response"] = response.choices[0].message.content
+            except Exception as e:
+                debug_info["openai_test"] = "FAILED"
+                debug_info["openai_error"] = str(e)
+        else:
+            debug_info["openai_test"] = "SKIPPED - No client"
+            
+        return debug_info
+        
+    except Exception as e:
+        return {"error": str(e), "debug_failed": True}
+
+
 @app.get("/metrics", response_class=HTMLResponse)
 async def metrics_dashboard():
     """Serve the metrics dashboard UI."""

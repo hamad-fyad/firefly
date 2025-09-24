@@ -138,8 +138,26 @@ def predict_category(description: str) -> str:
         # Get OpenAI client
         client = get_openai_client()
         if not client:
-            logger.warning("OpenAI client not available, returning default category")
-            return "Uncategorized"
+            logger.warning("OpenAI client not available, using fallback categorization")
+            fallback_category = fallback_categorization(description)
+            
+            # Record the fallback prediction
+            confidence = 0.6
+            metadata = model_manager.load_metadata()
+            current_version = metadata.get("current_version", "fallback-v1") if metadata else "fallback-v1"
+            
+            try:
+                model_metrics.record_prediction(
+                    version_id=current_version,
+                    description=description,
+                    predicted_category=fallback_category,
+                    confidence=confidence
+                )
+                logger.info("Recorded fallback prediction (no OpenAI): '%s' -> '%s'", description, fallback_category)
+            except Exception as metrics_error:
+                logger.error("Failed to record fallback prediction metrics: %s", str(metrics_error))
+            
+            return fallback_category
 
         # Get available categories (you might want to make this configurable)
         available_categories = [
@@ -219,23 +237,69 @@ def predict_category(description: str) -> str:
 def fallback_categorization(description: str) -> str:
     """
     Fallback categorization when OpenAI is unavailable.
-    Uses simple keyword matching.
+    Uses simple keyword matching with comprehensive rules.
     """
+    if not description:
+        return "Other"
+        
     description_lower = description.lower()
     
-    # Simple keyword-based categorization
-    if any(word in description_lower for word in ['food', 'restaurant', 'grocery', 'coffee', 'lunch', 'dinner', 'breakfast']):
+    # Food & Drink
+    food_keywords = ['food', 'restaurant', 'grocery', 'coffee', 'lunch', 'dinner', 'breakfast', 
+                     'cafe', 'pizza', 'burger', 'sushi', 'bar', 'pub', 'bakery', 'deli', 
+                     'market', 'supermarket', 'mcdonald', 'starbucks', 'subway', 'kfc']
+    if any(word in description_lower for word in food_keywords):
         return "Food & Drink"
-    elif any(word in description_lower for word in ['gas', 'fuel', 'uber', 'taxi', 'bus', 'train', 'parking']):
+    
+    # Transportation
+    transport_keywords = ['gas', 'fuel', 'uber', 'taxi', 'bus', 'train', 'parking', 'metro',
+                         'airport', 'flight', 'airline', 'car', 'vehicle', 'toll', 'petrol',
+                         'lyft', 'station', 'transport', 'ferry', 'bike']
+    if any(word in description_lower for word in transport_keywords):
         return "Transportation"
-    elif any(word in description_lower for word in ['gym', 'fitness', 'health', 'doctor', 'pharmacy', 'medical']):
+    
+    # Health & Fitness
+    health_keywords = ['gym', 'fitness', 'health', 'doctor', 'pharmacy', 'medical', 'hospital',
+                      'clinic', 'dentist', 'medicine', 'prescription', 'wellness', 'therapy',
+                      'yoga', 'massage', 'spa', 'sport']
+    if any(word in description_lower for word in health_keywords):
         return "Health & Fitness"
-    elif any(word in description_lower for word in ['amazon', 'shopping', 'store', 'purchase', 'buy', 'bought']):
+    
+    # Shopping
+    shopping_keywords = ['amazon', 'shopping', 'store', 'purchase', 'buy', 'bought', 'shop',
+                        'retail', 'mall', 'outlet', 'ebay', 'walmart', 'target', 'costco',
+                        'clothes', 'clothing', 'fashion', 'electronics']
+    if any(word in description_lower for word in shopping_keywords):
         return "Shopping"
-    elif any(word in description_lower for word in ['electric', 'water', 'gas bill', 'internet', 'phone', 'utility']):
+    
+    # Bills & Utilities
+    utility_keywords = ['electric', 'water', 'gas bill', 'internet', 'phone', 'utility',
+                       'bill', 'payment', 'subscription', 'netflix', 'spotify', 'cable',
+                       'insurance', 'rent', 'mortgage', 'loan']
+    if any(word in description_lower for word in utility_keywords):
         return "Bills & Utilities"
-    else:
-        return "Other"
+    
+    # Entertainment
+    entertainment_keywords = ['movie', 'cinema', 'theater', 'game', 'entertainment', 'concert',
+                             'music', 'streaming', 'netflix', 'youtube', 'book', 'magazine']
+    if any(word in description_lower for word in entertainment_keywords):
+        return "Entertainment"
+    
+    # Income (transfers, salary, etc.)
+    income_keywords = ['salary', 'wage', 'payroll', 'transfer', 'deposit', 'refund', 'cashback',
+                      'dividend', 'interest', 'bonus', 'income', 'payment received']
+    if any(word in description_lower for word in income_keywords):
+        return "Income"
+    
+    # Bank Fees
+    fee_keywords = ['fee', 'charge', 'atm', 'overdraft', 'maintenance', 'service charge',
+                   'penalty', 'commission', 'bank fee']
+    if any(word in description_lower for word in fee_keywords):
+        return "Bank Fees"
+    
+    # Default fallback
+    logger.info("No keyword match found for description: '%s', categorizing as 'Other'", description)
+    return "Other"
 
 def evaluate_model(model_data, X_test, y_test) -> Dict[str, Any]:
     """
