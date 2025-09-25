@@ -260,12 +260,26 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install bandit semgrep
 
+
+      - name: Create security reports directory
+        run: |
+          mkdir -p security-reports
+
+      - name: Run Bandit Security Scanner
+        run: |
+          echo "🔍 Running Bandit security scanner..."
+          bandit -r tests/ firefly-ai-categorizer/ *.py -f json -o security-reports/bandit-report.json || true
+          bandit -r tests/ firefly-ai-categorizer/ *.py -f txt -o security-reports/bandit-report.txt || true
+          echo "📊 Bandit scan completed"
 
       - name: Run Semgrep (SAST)
         run: |
-          semgrep --config=auto tests/ *.py --json --output=security-reports/semgrep-report.json || true
-          semgrep --config=auto tests/ *.py || echo "::warning::Security patterns found by Semgrep"
+          echo "🔍 Running Semgrep SAST scanner..."
+          semgrep --config=auto tests/ firefly-ai-categorizer/ *.py --json --output=security-reports/semgrep-report.json || true
+          semgrep --config=auto tests/ firefly-ai-categorizer/ *.py --text --output=security-reports/semgrep-report.txt || true
+          echo "📊 Semgrep scan completed"
 
       - name: Check for Secrets in Code
         run: |
@@ -276,15 +290,140 @@ jobs:
           # Check for hardcoded URLs and IPs
           grep -r -E "http://[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+" tests/ || echo "No hardcoded IPs found"
 
-      - name: Generate Security Summary
+      - name: Generate Enhanced Security Summary
         run: |
-          mkdir -p security-reports
-          echo "# Security Test Report" > security-reports/security-summary.md
+          echo "# 🛡️ Security Test Report" > security-reports/security-summary.md
           echo "Generated: $(date)" >> security-reports/security-summary.md
           echo "" >> security-reports/security-summary.md
-          echo "## Tests Performed:" >> security-reports/security-summary.md
-          echo "- Semgrep: Static Application Security Testing (SAST)" >> security-reports/security-summary.md
-          echo "- Secrets detection: Manual pattern matching" >> security-reports/security-summary.md
+          
+          # Test Summary
+          echo "## 🔍 Tests Performed:" >> security-reports/security-summary.md
+          echo "- **Bandit**: Python security linter for common security issues" >> security-reports/security-summary.md
+          echo "- **Semgrep**: Static Application Security Testing (SAST)" >> security-reports/security-summary.md
+          echo "- **Secrets Detection**: Manual pattern matching for hardcoded secrets" >> security-reports/security-summary.md
+          echo "" >> security-reports/security-summary.md
+          
+          # Parse Bandit Results
+          echo "## 🔥 Bandit Security Findings:" >> security-reports/security-summary.md
+          if [ -f "security-reports/bandit-report.json" ]; then
+            python3 -c "
+          import json, sys
+          try:
+              with open('security-reports/bandit-report.json', 'r') as f:
+                  data = json.load(f)
+              total = len(data.get('results', []))
+              high = len([r for r in data.get('results', []) if r.get('issue_severity') == 'HIGH'])
+              medium = len([r for r in data.get('results', []) if r.get('issue_severity') == 'MEDIUM'])
+              low = len([r for r in data.get('results', []) if r.get('issue_severity') == 'LOW'])
+              print(f'- **Total Issues**: {total}')
+              print(f'- **High Severity**: {high}')  
+              print(f'- **Medium Severity**: {medium}')
+              print(f'- **Low Severity**: {low}')
+              print()
+              
+              if total > 0:
+                  print('### 🚨 Top Issues Found:')
+                  for i, result in enumerate(data.get('results', [])[:5], 1):
+                      severity = result.get('issue_severity', 'UNKNOWN')
+                      test_name = result.get('test_name', 'Unknown Test')
+                      filename = result.get('filename', 'Unknown File').split('/')[-1]
+                      line_number = result.get('line_number', 'N/A')
+                      issue_text = result.get('issue_text', 'No description')[:100]
+                      print(f'{i}. **{severity}** - {test_name}')
+                      print(f'   - **File**: \`{filename}:{line_number}\`')
+                      print(f'   - **Issue**: {issue_text}')
+                      print()
+              else:
+                  print('✅ **No security issues found by Bandit!**')
+          except Exception as e:
+              print(f'❌ Error parsing Bandit report: {e}')
+          " >> security-reports/security-summary.md
+          else
+            echo "❌ Bandit report not generated" >> security-reports/security-summary.md
+          fi
+          echo "" >> security-reports/security-summary.md
+          
+          # Parse Semgrep Results  
+          echo "## 🎯 Semgrep Security Findings:" >> security-reports/security-summary.md
+          if [ -f "security-reports/semgrep-report.json" ]; then
+            python3 -c "
+          import json, sys
+          try:
+              with open('security-reports/semgrep-report.json', 'r') as f:
+                  data = json.load(f)
+              results = data.get('results', [])
+              total = len(results)
+              print(f'- **Total Findings**: {total}')
+              
+              if total > 0:
+                  severities = {}
+                  for result in results:
+                      severity = result.get('extra', {}).get('severity', 'INFO')
+                      severities[severity] = severities.get(severity, 0) + 1
+                  
+                  for sev, count in severities.items():
+                      print(f'- **{sev}**: {count} issues')
+                  print()
+                  
+                  print('### 🚨 Top Issues Found:')
+                  for i, result in enumerate(results[:5], 1):
+                      rule_id = result.get('check_id', 'Unknown Rule').split('.')[-1]
+                      message = result.get('extra', {}).get('message', 'No description')[:80]
+                      path = result.get('path', 'Unknown File').split('/')[-1]
+                      line = result.get('start', {}).get('line', 'N/A')
+                      severity = result.get('extra', {}).get('severity', 'INFO')
+                      print(f'{i}. **{severity}** - {rule_id}')
+                      print(f'   - **File**: \`{path}:{line}\`')
+                      print(f'   - **Issue**: {message}')
+                      print()
+              else:
+                  print('✅ **No security issues found by Semgrep!**')
+          except Exception as e:
+              print(f'❌ Error parsing Semgrep report: {e}')
+          " >> security-reports/security-summary.md
+          else
+            echo "❌ Semgrep report not generated" >> security-reports/security-summary.md
+          fi
+          echo "" >> security-reports/security-summary.md
+          
+          # Manual secrets check results
+          echo "## 🔐 Secrets Detection Results:" >> security-reports/security-summary.md
+          
+          # Check for secrets and save results
+          SECRET_FINDINGS=$(grep -r -i "password\|secret\|key\|token" tests/ firefly-ai-categorizer/ --exclude-dir=__pycache__ --exclude="*.pyc" 2>/dev/null | head -10 || echo "")
+          if [ -n "$SECRET_FINDINGS" ]; then
+            echo "⚠️ **Potential secrets found:**" >> security-reports/security-summary.md
+            echo '```' >> security-reports/security-summary.md
+            echo "$SECRET_FINDINGS" >> security-reports/security-summary.md
+            echo '```' >> security-reports/security-summary.md
+          else
+            echo "✅ **No obvious hardcoded secrets detected**" >> security-reports/security-summary.md
+          fi
+          echo "" >> security-reports/security-summary.md
+          
+          # Hardcoded IPs check
+          IP_FINDINGS=$(grep -r -E "http://[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+" tests/ firefly-ai-categorizer/ 2>/dev/null || echo "")
+          if [ -n "$IP_FINDINGS" ]; then
+            echo "🌐 **Hardcoded IP addresses found:**" >> security-reports/security-summary.md
+            echo '```' >> security-reports/security-summary.md
+            echo "$IP_FINDINGS" >> security-reports/security-summary.md
+            echo '```' >> security-reports/security-summary.md
+          else
+            echo "✅ **No hardcoded IP addresses detected**" >> security-reports/security-summary.md
+          fi
+          echo "" >> security-reports/security-summary.md
+          
+          # Summary
+          echo "## 📋 Security Scan Summary:" >> security-reports/security-summary.md
+          echo "- **Report Generated**: $(date)" >> security-reports/security-summary.md
+          echo "- **Scanned Directories**: tests/, firefly-ai-categorizer/, root Python files" >> security-reports/security-summary.md
+          echo "- **Tools Used**: Bandit, Semgrep, Manual pattern matching" >> security-reports/security-summary.md
+          echo "" >> security-reports/security-summary.md
+          echo "📄 **Detailed Reports Available:**" >> security-reports/security-summary.md
+          echo "- [Bandit JSON Report](bandit-report.json)" >> security-reports/security-summary.md
+          echo "- [Bandit Text Report](bandit-report.txt)" >> security-reports/security-summary.md
+          echo "- [Semgrep JSON Report](semgrep-report.json)" >> security-reports/security-summary.md
+          echo "- [Semgrep Text Report](semgrep-report.txt)" >> security-reports/security-summary.md
 
       - name: Upload Security Reports
         uses: actions/upload-artifact@v4
