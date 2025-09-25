@@ -62,6 +62,21 @@ class PredictionLogs(Base):
     actual_category = Column(String(100), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class AccuracyFeedback(Base):
+    """Table for storing user feedback on prediction accuracy."""
+    __tablename__ = "accuracy_feedback"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    prediction_id = Column(Integer, nullable=False, index=True)  # Reference to PredictionLogs.id
+    description = Column(Text, nullable=False)
+    predicted_category = Column(String(100), nullable=False)
+    actual_category = Column(String(100), nullable=False)
+    confidence = Column(Float, nullable=False)
+    is_correct = Column(Integer, nullable=False)  # 1 for correct, 0 for incorrect
+    feedback_source = Column(String(50), default="user", nullable=False)  # "user", "auto", "manual"
+    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 def get_database_session():
     """Get database session with error handling."""
     if not SessionLocal:

@@ -2,10 +2,14 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import httpx
+import logging
 from app.ai_model import predict_category, retrain_model
 from app.feedback_storage import save_feedback
 from app.model_metrics import get_model_performance_summary, get_predictions_data
 import dotenv, os
+
+# Set up logging
+logger = logging.getLogger(__name__)
 app = FastAPI()
 dotenv.load_dotenv()
 FIREFFLY_API = "http://app:8080/api/v1"
@@ -177,14 +181,51 @@ async def incoming_event(request: Request):
 
 @app.post("/feedback")
 async def transaction_updated(request: Request):
-    data = await request.json()
-    tx_desc = data["transactions"][0]["description"]
-    user_cat = data["transactions"][0]["category_name"]
+    """Enhanced feedback endpoint that records accuracy data for confidence improvement."""
+    try:
+        data = await request.json()
+        tx_desc = data["transactions"][0]["description"]
+        user_cat = data["transactions"][0]["category_name"]
+        predicted_cat = data.get("predicted_category")  # If available
+        confidence = data.get("confidence", 0.7)  # If available
 
-    save_feedback(tx_desc, user_cat)
-    retrain_model()  # optional: retrain immediately
+        # Store traditional feedback
+        save_feedback(tx_desc, user_cat)
+        
+        # Record accuracy feedback if we have prediction info
+        if predicted_cat:
+            from . import model_metrics
+            # Find the most recent prediction for this description
+            recent_predictions = model_metrics.get_recent_predictions(limit=100)
+            prediction_id = None
+            
+            for pred in recent_predictions:
+                if pred["description"].strip().lower() == tx_desc.strip().lower():
+                    prediction_id = pred.get("id", len(recent_predictions))  # Use ID or fallback
+                    break
+            
+            if prediction_id:
+                model_metrics.record_accuracy_feedback(
+                    prediction_id=prediction_id,
+                    predicted_category=predicted_cat,
+                    actual_category=user_cat,
+                    description=tx_desc,
+                    confidence=confidence,
+                    feedback_source="user"
+                )
+                logger.info(f"Recorded accuracy feedback: '{predicted_cat}' -> '{user_cat}' for '{tx_desc}'")
+        
+        # Optional: retrain model (can be disabled for performance)
+        # retrain_model()
 
-    return {"status": "Feedback stored", "category": user_cat}
+        return {
+            "status": "Feedback stored", 
+            "category": user_cat,
+            "accuracy_recorded": predicted_cat is not None
+        }
+    except Exception as e:
+        logger.error(f"Error processing feedback: {str(e)}")
+        return {"status": "Error", "message": str(e)}
 
 
 @app.post("/test-categorize")
@@ -449,6 +490,11 @@ async def metrics_dashboard():
                 const statsGrid = document.getElementById('statsGrid');
                 const summary = data.summary;
                 const predictions = data.predictions;
+                const accuracy = data.accuracy || {};
+                
+                // Use real-time accuracy if available, otherwise fall back to model accuracy
+                const realAccuracy = accuracy.overall_accuracy || summary.average_metrics.accuracy;
+                const accuracySource = accuracy.sample_size > 0 ? "Real-time" : "Estimated";
                 
                 statsGrid.innerHTML = `
                     <div class="stat-card">
@@ -463,9 +509,10 @@ async def metrics_dashboard():
                         <h3>${(summary.prediction_stats.avg_confidence * 100).toFixed(1)}%</h3>
                         <p>Avg Confidence</p>
                     </div>
-                    <div class="stat-card">
-                        <h3>${(summary.average_metrics.accuracy * 100).toFixed(1)}%</h3>
-                        <p>Accuracy</p>
+                    <div class="stat-card" title="${accuracySource} accuracy based on ${accuracy.sample_size || 0} feedback entries">
+                        <h3 style="color: ${accuracy.sample_size > 0 ? '#4CAF50' : '#FF9800'}">${(realAccuracy * 100).toFixed(1)}%</h3>
+                        <p>${accuracySource} Accuracy</p>
+                        <small style="color: #666;">${accuracy.sample_size || 0} feedback entries</small>
                     </div>
                 `;
             }
@@ -601,6 +648,25 @@ async def metrics_dashboard():
     return HTMLResponse(content=html_content)
 
 
+@app.get("/api/accuracy")
+async def get_real_time_accuracy():
+    """API endpoint to get real-time accuracy metrics based on user feedback."""
+    try:
+        from . import model_metrics
+        accuracy_data = model_metrics.get_real_time_accuracy()
+        return {
+            "status": "success",
+            "data": accuracy_data,
+            "timestamp": model_metrics.datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting real-time accuracy: {str(e)}")
+        return {
+            "status": "error", 
+            "message": str(e),
+            "data": {"overall_accuracy": 0.75, "sample_size": 0}
+        }
+
 @app.get("/api/metrics")
 async def get_metrics_data():
     """API endpoint to get metrics data in JSON format."""
@@ -608,9 +674,14 @@ async def get_metrics_data():
         summary = get_model_performance_summary()
         predictions = get_predictions_data()
         
+        # Get real-time accuracy data
+        from . import model_metrics
+        accuracy_data = model_metrics.get_real_time_accuracy()
+        
         return {
             "summary": summary,
             "predictions": predictions,
+            "accuracy": accuracy_data,
             "storage_type": summary.get("storage_type", "unknown")
         }
     except Exception as e:

@@ -34,6 +34,19 @@ class ModelError(Exception):
     """Custom exception for model-related errors."""
     pass
 
+def get_few_shot_examples_text() -> str:
+    """Generate few-shot examples text for better categorization"""
+    examples_text = """
+Examples:
+- "TESCO GROCERY STORE" → Groceries (confidence: 0.95)
+- "Uber Trip to Airport" → Transport (confidence: 0.92)
+- "Netflix Monthly Subscription" → Entertainment (confidence: 0.90)
+- "British Gas Bill Payment" → Bills (confidence: 0.88)
+- "Amazon Purchase" → Shopping (confidence: 0.85)
+- "ATM Cash Withdrawal" → Other (confidence: 0.70)
+"""
+    return examples_text.strip()
+
 def load_model() -> Optional[Dict[str, Any]]:
     """
     Load the trained model metadata from disk.
@@ -169,37 +182,90 @@ def predict_category(description: str) -> str:
             "AI & Tech","Bank Fees", "Healthcare", "Housing", "Income", "Investment", "Education", "Travel", "Insurance", "Charity", "Other"
         ]
 
-        # Create the prompt
-        prompt = create_categorization_prompt(description, available_categories)
+        # Enhanced prompt to get confidence scores
+        enhanced_prompt = f"""You are an AI assistant that categorizes financial transactions. Based on the transaction description, choose the most appropriate category and provide a confidence score.
 
-        # Call OpenAI API
+Available Categories: {', '.join(available_categories)}
+
+Here are some examples:
+{get_few_shot_examples_text()}
+
+Now categorize this transaction:
+Description: {description}
+
+Respond in this EXACT JSON format:
+{{
+    "category": "chosen_category_name",
+    "confidence": 0.95,
+    "reasoning": "brief explanation why this category fits"
+}}
+
+The confidence should be between 0.0 and 1.0, where:
+- 0.9-1.0: Very confident (clear indicators)
+- 0.7-0.9: Confident (good match)
+- 0.5-0.7: Moderate confidence (some uncertainty)
+- 0.0-0.5: Low confidence (unclear/ambiguous)"""
+
+        # Call OpenAI API with enhanced prompt
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",  # You can use gpt-4 for better accuracy
             messages=[
-                {"role": "system", "content": "You are a financial transaction categorization assistant. Respond with only the category name."},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": "You are a financial transaction categorization expert. Always respond with valid JSON containing category, confidence, and reasoning."},
+                {"role": "user", "content": enhanced_prompt}
             ],
-            max_tokens=50,
+            max_tokens=150,
             temperature=0.1,  # Low temperature for consistent results
             timeout=30
         )
 
-        predicted_category = response.choices[0].message.content.strip()
+        try:
+            # Parse the JSON response
+            response_text = response.choices[0].message.content.strip()
+            # Remove any markdown formatting if present
+            if response_text.startswith("```json"):
+                response_text = response_text[7:-3].strip()
+            elif response_text.startswith("```"):
+                response_text = response_text[3:-3].strip()
+            
+            prediction_data = json.loads(response_text)
+            predicted_category = prediction_data.get("category", "Other")
+            confidence = float(prediction_data.get("confidence", 0.7))
+            reasoning = prediction_data.get("reasoning", "")
+            
+            logger.info(f"OpenAI prediction: '{description}' -> '{predicted_category}' (confidence: {confidence:.2f}) - {reasoning}")
+            
+        except (json.JSONDecodeError, ValueError, KeyError) as e:
+            logger.warning(f"Failed to parse OpenAI JSON response: {e}. Falling back to simple parsing.")
+            # Fallback to simple text parsing
+            response_text = response.choices[0].message.content.strip()
+            predicted_category = response_text.split('\n')[0] if '\n' in response_text else response_text
+            confidence = 0.7  # Default confidence if parsing fails
+            reasoning = "Parsed from simple text response"
         
         # Validate that the response is one of our available categories
         if predicted_category not in available_categories:
             # Try to find the closest match
             predicted_category_lower = predicted_category.lower()
+            original_confidence = confidence
             for cat in available_categories:
                 if cat.lower() in predicted_category_lower or predicted_category_lower in cat.lower():
                     predicted_category = cat
                     break
             else:
-                # If no match found, default to a reasonable category
+                # If no match found, default to a reasonable category and reduce confidence
                 predicted_category = "Other"
+                confidence = max(0.3, confidence * 0.5)  # Reduce confidence due to category mismatch
+                logger.warning(f"Category not in available list, defaulting to 'Other' and reducing confidence from {original_confidence:.2f} to {confidence:.2f}")
+
+        # Enhance confidence with historical data
+        dynamic_confidence = model_metrics.get_dynamic_confidence(description, predicted_category)
+        # Combine OpenAI confidence with historical accuracy (weighted average)
+        final_confidence = 0.6 * confidence + 0.4 * dynamic_confidence
+        final_confidence = max(0.3, min(0.95, final_confidence))  # Keep in reasonable range
+        
+        logger.info(f"Final confidence: OpenAI={confidence:.2f}, Historical={dynamic_confidence:.2f}, Combined={final_confidence:.2f}")
 
         # Record the prediction
-        confidence = 0.9  # OpenAI predictions are generally high confidence
         metadata = model_manager.load_metadata()
         current_version = metadata.get("current_version") if metadata else "openai-v1"
         
@@ -207,7 +273,7 @@ def predict_category(description: str) -> str:
             version_id=current_version,
             description=description,
             predicted_category=predicted_category,
-            confidence=confidence
+            confidence=final_confidence
         )
 
         logger.info("Successfully predicted category '%s' with OpenAI", predicted_category)

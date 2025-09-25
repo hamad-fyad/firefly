@@ -9,11 +9,11 @@ logger = logging.getLogger(__name__)
 # Import database components (with fallback to file storage)
 try:
     from .database import (
-        get_database_session, ModelMetrics, PredictionLogs, 
+        get_database_session, ModelMetrics, PredictionLogs, AccuracyFeedback,
         init_database, test_connection
     )
     from sqlalchemy.orm import Session
-    from sqlalchemy import desc
+    from sqlalchemy import desc, func
     DATABASE_AVAILABLE = True
     logger.info("Database components imported successfully")
 except ImportError as e:
@@ -370,3 +370,143 @@ def get_predictions_data() -> List[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"Failed to load predictions data: {str(e)}")
         return []
+
+def record_accuracy_feedback(prediction_id: int, predicted_category: str, actual_category: str, 
+                           description: str, confidence: float, feedback_source: str = "user") -> bool:
+    """Record user feedback on prediction accuracy to improve future confidence estimates."""
+    try:
+        is_correct = 1 if predicted_category.lower() == actual_category.lower() else 0
+        
+        if DATABASE_AVAILABLE:
+            session = get_database_session()
+            if session:
+                feedback = AccuracyFeedback(
+                    prediction_id=prediction_id,
+                    description=description,
+                    predicted_category=predicted_category,
+                    actual_category=actual_category,
+                    confidence=confidence,
+                    is_correct=is_correct,
+                    feedback_source=feedback_source,
+                    timestamp=datetime.utcnow()
+                )
+                session.add(feedback)
+                session.commit()
+                session.close()
+                logger.info(f"Recorded accuracy feedback: {predicted_category} -> {actual_category} ({'correct' if is_correct else 'incorrect'})")
+                return True
+    except Exception as e:
+        logger.error(f"Failed to record accuracy feedback: {str(e)}")
+    
+    return False
+
+def get_dynamic_confidence(description: str, predicted_category: str) -> float:
+    """Calculate dynamic confidence based on historical accuracy for similar predictions."""
+    try:
+        if not DATABASE_AVAILABLE:
+            return 0.7  # Default confidence
+        
+        session = get_database_session()
+        if not session:
+            return 0.7
+        
+        # Get historical accuracy for this category
+        category_feedback = session.query(AccuracyFeedback).filter_by(
+            predicted_category=predicted_category
+        ).all()
+        
+        if len(category_feedback) < 5:  # Not enough data
+            session.close()
+            return 0.7
+        
+        # Calculate accuracy rate for this category
+        correct_predictions = sum(1 for f in category_feedback if f.is_correct == 1)
+        accuracy_rate = correct_predictions / len(category_feedback)
+        
+        # Look for similar descriptions (simple keyword matching)
+        similar_feedback = []
+        description_words = set(description.lower().split())
+        
+        for feedback in category_feedback:
+            feedback_words = set(feedback.description.lower().split())
+            similarity = len(description_words & feedback_words) / len(description_words | feedback_words)
+            if similarity > 0.3:  # 30% word overlap
+                similar_feedback.append(feedback)
+        
+        session.close()
+        
+        # If we have similar descriptions, use their accuracy
+        if similar_feedback:
+            similar_correct = sum(1 for f in similar_feedback if f.is_correct == 1)
+            similar_accuracy = similar_correct / len(similar_feedback)
+            # Weight between general category accuracy and similar description accuracy
+            final_confidence = 0.4 * accuracy_rate + 0.6 * similar_accuracy
+        else:
+            final_confidence = accuracy_rate
+        
+        # Ensure confidence is in reasonable range
+        final_confidence = max(0.3, min(0.95, final_confidence))
+        
+        logger.info(f"Dynamic confidence for '{predicted_category}': {final_confidence:.2f} (based on {len(category_feedback)} historical predictions)")
+        return final_confidence
+        
+    except Exception as e:
+        logger.error(f"Failed to calculate dynamic confidence: {str(e)}")
+        return 0.7  # Default fallback
+
+def get_real_time_accuracy() -> Dict[str, float]:
+    """Get real-time accuracy metrics based on user feedback."""
+    try:
+        if not DATABASE_AVAILABLE:
+            return {"overall_accuracy": 0.75, "sample_size": 0}
+        
+        session = get_database_session()
+        if not session:
+            return {"overall_accuracy": 0.75, "sample_size": 0}
+        
+        # Get all feedback from the last 30 days
+        from datetime import timedelta
+        thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+        
+        recent_feedback = session.query(AccuracyFeedback).filter(
+            AccuracyFeedback.timestamp >= thirty_days_ago
+        ).all()
+        
+        if not recent_feedback:
+            session.close()
+            return {"overall_accuracy": 0.75, "sample_size": 0}
+        
+        # Calculate overall accuracy
+        correct_predictions = sum(1 for f in recent_feedback if f.is_correct == 1)
+        overall_accuracy = correct_predictions / len(recent_feedback)
+        
+        # Calculate per-category accuracy
+        category_accuracy = {}
+        categories = {}
+        
+        for feedback in recent_feedback:
+            cat = feedback.predicted_category
+            if cat not in categories:
+                categories[cat] = {"correct": 0, "total": 0}
+            categories[cat]["total"] += 1
+            if feedback.is_correct == 1:
+                categories[cat]["correct"] += 1
+        
+        for cat, stats in categories.items():
+            category_accuracy[cat] = stats["correct"] / stats["total"]
+        
+        session.close()
+        
+        result = {
+            "overall_accuracy": overall_accuracy,
+            "sample_size": len(recent_feedback),
+            "category_accuracy": category_accuracy,
+            "feedback_count": len(recent_feedback)
+        }
+        
+        logger.info(f"Real-time accuracy: {overall_accuracy:.2f} (based on {len(recent_feedback)} recent feedback entries)")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Failed to calculate real-time accuracy: {str(e)}")
+        return {"overall_accuracy": 0.75, "sample_size": 0}
