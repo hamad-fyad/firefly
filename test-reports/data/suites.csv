@@ -1,0 +1,44 @@
+"DESCRIPTION","DURATION IN MS","NAME","PARENT SUITE","START TIME","STATUS","STOP TIME","SUB SUITE","SUITE","TEST CLASS","TEST METHOD"
+"
+    Test System Information and Health Check Workflow
+    
+    Purpose:
+        Validates that the Firefly III instance is healthy and returns proper system information.
+        This is often the first test to run to ensure basic connectivity.
+    
+    What it tests:
+        - API endpoint accessibility (/about)
+        - Response structure contains required system information
+        - Version information format validation
+        - Basic authentication works
+    
+    How it works:
+        1. Makes GET request to /about endpoint with authentication headers
+        2. Validates HTTP 200 response (service is running)
+        3. Checks response contains version, api_version, and php_version fields
+        4. Validates version format follows semantic versioning (contains dots)
+    
+    Business Value:
+        - Ensures the system is operational before running financial tests
+        - Validates API versioning for compatibility checks
+        - Confirms authentication is working properly
+    ","307","test_firefly_about_endpoint","tests","Fri Sep 26 17:01:51 UTC 2025","passed","Fri Sep 26 17:01:51 UTC 2025","","test_firefly_advanced","",""
+"Test webhook payload validation logic.","0","test_webhook_payload_validation","tests","Fri Sep 26 17:00:48 UTC 2025","passed","Fri Sep 26 17:00:48 UTC 2025","","test_webhook_unit","",""
+"Test webhook AI integration with mocked calls.","1","test_webhook_ai_integration_mock","tests","Fri Sep 26 17:00:48 UTC 2025","passed","Fri Sep 26 17:00:48 UTC 2025","","test_webhook_unit","",""
+"Test webhook retry logic for failed requests.","0","test_webhook_retry_logic","tests","Fri Sep 26 17:00:48 UTC 2025","passed","Fri Sep 26 17:00:48 UTC 2025","","test_webhook_unit","",""
+"Test fallback categorization when AI is unavailable.","1","test_ai_fallback_categorization","tests","Fri Sep 26 17:00:48 UTC 2025","passed","Fri Sep 26 17:00:48 UTC 2025","","test_ai_unit","",""
+"Test webhook queue processing logic.","1","test_webhook_queue_processing","tests","Fri Sep 26 17:00:48 UTC 2025","passed","Fri Sep 26 17:00:48 UTC 2025","","test_webhook_unit","",""
+"Test webhook payload sanitization and security.","0","test_webhook_payload_sanitization","tests","Fri Sep 26 17:00:48 UTC 2025","passed","Fri Sep 26 17:00:48 UTC 2025","","test_webhook_unit","",""
+"Test webhook rate limiting logic.","0","test_webhook_rate_limiting","tests","Fri Sep 26 17:00:48 UTC 2025","passed","Fri Sep 26 17:00:48 UTC 2025","","test_webhook_unit","",""
+"Test webhook data transformation logic.","0","test_webhook_data_transformation","tests","Fri Sep 26 17:00:48 UTC 2025","passed","Fri Sep 26 17:00:48 UTC 2025","","test_webhook_unit","",""
+"Test withdrawal creation - expense tracking and money outflow recording.","937","test_create_withdrawal_transaction","tests","Fri Sep 26 17:01:49 UTC 2025","passed","Fri Sep 26 17:01:50 UTC 2025","","test_firefly_transactions","",""
+"Test AI categorization logic with mocked OpenAI responses.","0","test_ai_categorization_logic","tests","Fri Sep 26 17:00:48 UTC 2025","passed","Fri Sep 26 17:00:48 UTC 2025","","test_ai_unit","",""
+"Test AI metrics data structure without database dependencies.","0","test_ai_metrics_structure","tests","Fri Sep 26 17:00:48 UTC 2025","passed","Fri Sep 26 17:00:48 UTC 2025","","test_ai_unit","",""
+"Test AI confidence threshold handling without external dependencies.","0","test_ai_confidence_threshold_logic","tests","Fri Sep 26 17:00:48 UTC 2025","passed","Fri Sep 26 17:00:48 UTC 2025","","test_ai_unit","",""
+"Test AI error handling scenarios.","0","test_ai_error_handling","tests","Fri Sep 26 17:00:48 UTC 2025","passed","Fri Sep 26 17:00:48 UTC 2025","","test_ai_unit","",""
+"Test webhook error handling scenarios.","0","test_webhook_error_handling","tests","Fri Sep 26 17:00:48 UTC 2025","passed","Fri Sep 26 17:00:48 UTC 2025","","test_webhook_unit","",""
+"Test account creation - validates new financial account setup.","413","test_post_account","tests","Fri Sep 26 17:01:51 UTC 2025","passed","Fri Sep 26 17:01:52 UTC 2025","","test_account","",""
+"Test AI category validation logic.","0","test_ai_category_validation","tests","Fri Sep 26 17:00:48 UTC 2025","passed","Fri Sep 26 17:00:48 UTC 2025","","test_ai_unit","",""
+"Test webhook signature validation logic.","1","test_webhook_signature_validation","tests","Fri Sep 26 17:00:48 UTC 2025","passed","Fri Sep 26 17:00:48 UTC 2025","","test_webhook_unit","",""
+"Test AI service integration with mocked HTTP calls.","2","test_ai_service_integration_mock","tests","Fri Sep 26 17:00:48 UTC 2025","passed","Fri Sep 26 17:00:48 UTC 2025","","test_ai_unit","",""
+"Test deposit creation - income recording and money inflow tracking.","870","test_create_deposit_transaction","tests","Fri Sep 26 17:01:50 UTC 2025","passed","Fri Sep 26 17:01:50 UTC 2025","","test_firefly_transactions","",""

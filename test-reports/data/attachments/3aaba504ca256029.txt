@@ -1,0 +1,2 @@
+✅ Webhook data transformation successful
+   Transformed: Coffee shop purchase -> $5.75

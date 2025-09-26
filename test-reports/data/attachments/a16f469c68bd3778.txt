@@ -1,0 +1,5 @@
+✅ Starbucks Coffee Purchase Downtown -> Food & Drinks (0.95)
+✅ Shell Gas Station Highway 101 -> Transportation (0.88)
+✅ Walmart Grocery Shopping Weekly -> Groceries (0.92)
+✅ Netflix Monthly Subscription -> Entertainment (0.9)
+✅ Unknown Merchant Transaction -> Uncategorized (0.6)

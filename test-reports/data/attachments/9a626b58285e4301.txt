@@ -1,0 +1,3 @@
+✅ Signature validation: valid transaction da... -> Valid
+✅ Signature validation: tampered transaction... -> Invalid
+✅ Signature validation: ... -> Invalid

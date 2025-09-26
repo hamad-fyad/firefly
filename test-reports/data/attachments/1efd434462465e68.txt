@@ -1,0 +1,4 @@
+✅ Food & Drinks (0.95) -> Apply
+✅ Transportation (0.8) -> Apply
+✅ Shopping (0.7) -> Skip
+✅ Uncategorized (0.45) -> Skip
