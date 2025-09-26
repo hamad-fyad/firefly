@@ -1,7 +1,4 @@
 fastapi
 uvicorn
-scikit-learn
-joblib
 httpx
-pandas
 requests

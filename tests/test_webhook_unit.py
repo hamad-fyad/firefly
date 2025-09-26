@@ -1,3 +1,10 @@
+"""
+Webhook Unit Tests - Event Processing Logic and Data Validation
+
+Tests webhook payload processing, event handling logic, and data transformation.
+Unit tests for webhook service components that process Firefly III events
+and trigger AI categorization workflows.
+"""
 import pytest
 import json
 from unittest.mock import Mock, patch, MagicMock

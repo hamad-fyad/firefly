@@ -2,14 +2,18 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import httpx
+import logging
 from app.ai_model import predict_category, retrain_model
 from app.feedback_storage import save_feedback
 from app.model_metrics import get_model_performance_summary, get_predictions_data
 import dotenv, os
+
+# Set up logging
+logger = logging.getLogger(__name__)
 app = FastAPI()
 dotenv.load_dotenv()
 FIREFFLY_API = "http://app:8080/api/v1"
-FIREFFLY_TOKEN = os.environ.get("FIREFLY_TOKEN", "your_firefly_token")
+FIREFFLY_TOKEN = os.environ.get("FIREFLY_TOKEN")
 HEADERS = {"Authorization": f"Bearer {FIREFFLY_TOKEN}"}
 
 
@@ -17,22 +21,38 @@ HEADERS = {"Authorization": f"Bearer {FIREFFLY_TOKEN}"}
 async def health_check():
     """Health check endpoint for Docker."""
     try:
-        # Check if model exists and is loadable
-        from app.ai_model import get_model_path
-        model_status = "available"
-        try:
-            get_model_path()
-        except:
-            model_status = "not_available"
+        from app.ai_model import get_openai_client
+        client = get_openai_client()
         
-        return {
-            "status": "healthy",
-            "model_status": model_status
-        }
+        if client:
+            # Test if OpenAI is actually working (not just configured)
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[{"role": "user", "content": "test"}],
+                    max_tokens=5,
+                    timeout=3
+                )
+                model_status = "available"
+                model_type = "openai"
+            except Exception as openai_error:
+                # OpenAI configured but not working (quota/network issues)
+                if "insufficient_quota" in str(openai_error) or "429" in str(openai_error):
+                    model_status = "quota_exceeded"
+                    model_type = "fallback_active"
+                else:
+                    model_status = "error"
+                    model_type = "fallback_active"
+        else:
+            model_status = "fallback"
+            model_type = "keywords"
+            
+        return {"status": "healthy", "model_status": model_status, "model_type": model_type}
+        
     except Exception as e:
         return {
             "status": "healthy",  # Still healthy even without model
-            "model_status": "unknown",
+            "model_status": "error",
             "detail": str(e)
         }
 
@@ -49,25 +69,42 @@ async def incoming_event(request: Request):
     tx_id = transactions[0]["transaction_journal_id"]
     tx_desc = transactions[0]["description"]
 
-    try:
-        ai_category = predict_category(tx_desc)
-        
-        # Get confidence from prediction if available
-        confidence = 0.85  # Default confidence for successful predictions
-        
-    except Exception as e:
-        print(f"No model available")
-        return JSONResponse(status_code=200, content={"status": "no_model", "category": "Uncategorized", "detail": str(e)})
+    # predict_category now handles all fallbacks internally and never raises exceptions
+    ai_category = predict_category(tx_desc)
+    confidence = 0.85  # Default confidence for successful predictions
+    
+    print(f"✅ Transaction categorized: '{tx_desc}' -> '{ai_category}'")
 
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.get(f"{FIREFFLY_API}/categories", headers=HEADERS)
-            if resp.status_code != 200:
-                return JSONResponse(status_code=500, content={"status": "error", "detail": f"Failed to fetch categories: {resp.status_code}"})
+            if resp.status_code == 302:
+                # Authentication failed - token expired/invalid
+                print(f"⚠️  Firefly III authentication failed (302 redirect). Token may be expired.")
+                return {
+                    "status": "AI category predicted (auth required)", 
+                    "category": ai_category, 
+                    "confidence": confidence,
+                    "message": "Category predicted but Firefly III requires re-authentication. Please check/update the API token."
+                }
+            elif resp.status_code != 200:
+                print(f"⚠️  Firefly III API error {resp.status_code}. Category '{ai_category}' predicted but not applied.")
+                return {
+                    "status": "AI category predicted (API error)", 
+                    "category": ai_category, 
+                    "confidence": confidence,
+                    "message": f"Category predicted but Firefly III API returned {resp.status_code}"
+                }
             
             categories = resp.json()["data"]
         except Exception as e:
-            return JSONResponse(status_code=500, content={"status": "error", "detail": f"API communication error: {str(e)}"})
+            print(f"⚠️  Firefly III connection error: {str(e)}. Category '{ai_category}' predicted but not applied.")
+            return {
+                "status": "AI category predicted (connection error)", 
+                "category": ai_category, 
+                "confidence": confidence,
+                "message": f"Category predicted but connection to Firefly III failed: {str(e)}"
+            }
 
         # Find or create category
         category_id = None
@@ -83,12 +120,25 @@ async def incoming_event(request: Request):
                     headers=HEADERS,
                     json={"name": ai_category}
                 )
-                if create.status_code == 200:
+                if create.status_code in [200, 201]:
                     category_id = create.json()["data"]["id"]
+                    print(f"✅ Created new category '{ai_category}' with ID {category_id}")
                 else:
-                    return JSONResponse(status_code=500, content={"status": "error", "detail": f"Failed to create category: {create.status_code}"})
+                    print(f"⚠️  Failed to create category '{ai_category}' (status {create.status_code})")
+                    return {
+                        "status": "AI category predicted (category creation failed)", 
+                        "category": ai_category, 
+                        "confidence": confidence,
+                        "message": f"Category predicted but creation failed with status {create.status_code}"
+                    }
             except Exception as e:
-                return JSONResponse(status_code=500, content={"status": "error", "detail": f"Failed to create category: {str(e)}"})
+                print(f"⚠️  Exception creating category '{ai_category}': {str(e)}")
+                return {
+                    "status": "AI category predicted (category creation error)", 
+                    "category": ai_category, 
+                    "confidence": confidence,
+                    "message": f"Category predicted but creation failed: {str(e)}"
+                }
 
         # Update the transaction to assign it to the category
         try:
@@ -105,10 +155,25 @@ async def incoming_event(request: Request):
                 headers=HEADERS,
                 json=update_payload
             )
-            if attach_resp.status_code not in [200, 201, 204]:
-                return JSONResponse(status_code=500, content={"status": "error", "detail": f"Failed to update transaction: {attach_resp.status_code}, response: {attach_resp.text}"})
+            if attach_resp.status_code in [200, 201, 204]:
+                print(f"✅ Transaction {tx_id} successfully categorized as '{ai_category}'")
+                return {"status": "AI category assigned", "category": ai_category, "confidence": confidence}
+            else:
+                print(f"⚠️  Failed to update transaction {tx_id} (status {attach_resp.status_code})")
+                return {
+                    "status": "AI category predicted (assignment failed)", 
+                    "category": ai_category, 
+                    "confidence": confidence,
+                    "message": f"Category predicted but assignment failed with status {attach_resp.status_code}"
+                }
         except Exception as e:
-            return JSONResponse(status_code=500, content={"status": "error", "detail": f"Failed to update transaction: {str(e)}"})
+            print(f"⚠️  Exception updating transaction {tx_id}: {str(e)}")
+            return {
+                "status": "AI category predicted (assignment error)", 
+                "category": ai_category, 
+                "confidence": confidence,
+                "message": f"Category predicted but assignment failed: {str(e)}"
+            }
 
     return {"status": "AI category assigned", "category": ai_category, "confidence": confidence}
 
@@ -116,14 +181,67 @@ async def incoming_event(request: Request):
 
 @app.post("/feedback")
 async def transaction_updated(request: Request):
+    """Enhanced feedback endpoint that records accuracy data for confidence improvement."""
+    try:
+        data = await request.json()
+        tx_desc = data["transactions"][0]["description"]
+        user_cat = data["transactions"][0]["category_name"]
+        predicted_cat = data.get("predicted_category")  # If available
+        confidence = data.get("confidence", 0.7)  # If available
+
+        # Store traditional feedback
+        save_feedback(tx_desc, user_cat)
+        
+        # Record accuracy feedback if we have prediction info
+        if predicted_cat:
+            from . import model_metrics
+            # Find the most recent prediction for this description
+            recent_predictions = model_metrics.get_recent_predictions(limit=100)
+            prediction_id = None
+            
+            for pred in recent_predictions:
+                if pred["description"].strip().lower() == tx_desc.strip().lower():
+                    prediction_id = pred.get("id", len(recent_predictions))  # Use ID or fallback
+                    break
+            
+            if prediction_id:
+                model_metrics.record_accuracy_feedback(
+                    prediction_id=prediction_id,
+                    predicted_category=predicted_cat,
+                    actual_category=user_cat,
+                    description=tx_desc,
+                    confidence=confidence,
+                    feedback_source="user"
+                )
+                logger.info(f"Recorded accuracy feedback: '{predicted_cat}' -> '{user_cat}' for '{tx_desc}'")
+        
+        # Optional: retrain model (can be disabled for performance)
+        # retrain_model()
+
+        return {
+            "status": "Feedback stored", 
+            "category": user_cat,
+            "accuracy_recorded": predicted_cat is not None
+        }
+    except Exception as e:
+        logger.error(f"Error processing feedback: {str(e)}")
+        return {"status": "Error", "message": str(e)}
+
+
+@app.post("/test-categorize")
+async def test_categorize(request: Request):
+    """Test endpoint for manual categorization testing."""
     data = await request.json()
-    tx_desc = data["transactions"][0]["description"]
-    user_cat = data["transactions"][0]["category_name"]
-
-    save_feedback(tx_desc, user_cat)
-    retrain_model()  # optional: retrain immediately
-
-    return {"status": "Feedback stored", "category": user_cat}
+    description = data.get("description", "")
+    
+    if not description:
+        return JSONResponse(status_code=400, content={"error": "Description required"})
+    
+    try:
+        category = predict_category(description)
+        return {"description": description, "predicted_category": category, "source": "ai_service"}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 @app.get("/metrics", response_class=HTMLResponse)
@@ -372,6 +490,11 @@ async def metrics_dashboard():
                 const statsGrid = document.getElementById('statsGrid');
                 const summary = data.summary;
                 const predictions = data.predictions;
+                const accuracy = data.accuracy || {};
+                
+                // Use real-time accuracy if available, otherwise fall back to model accuracy
+                const realAccuracy = accuracy.overall_accuracy || summary.average_metrics.accuracy;
+                const accuracySource = accuracy.sample_size > 0 ? "Real-time" : "Estimated";
                 
                 statsGrid.innerHTML = `
                     <div class="stat-card">
@@ -386,9 +509,10 @@ async def metrics_dashboard():
                         <h3>${(summary.prediction_stats.avg_confidence * 100).toFixed(1)}%</h3>
                         <p>Avg Confidence</p>
                     </div>
-                    <div class="stat-card">
-                        <h3>${(summary.average_metrics.accuracy * 100).toFixed(1)}%</h3>
-                        <p>Accuracy</p>
+                    <div class="stat-card" title="${accuracySource} accuracy based on ${accuracy.sample_size || 0} feedback entries">
+                        <h3 style="color: ${accuracy.sample_size > 0 ? '#4CAF50' : '#FF9800'}">${(realAccuracy * 100).toFixed(1)}%</h3>
+                        <p>${accuracySource} Accuracy</p>
+                        <small style="color: #666;">${accuracy.sample_size || 0} feedback entries</small>
                     </div>
                 `;
             }
@@ -524,6 +648,25 @@ async def metrics_dashboard():
     return HTMLResponse(content=html_content)
 
 
+@app.get("/api/accuracy")
+async def get_real_time_accuracy():
+    """API endpoint to get real-time accuracy metrics based on user feedback."""
+    try:
+        from . import model_metrics
+        accuracy_data = model_metrics.get_real_time_accuracy()
+        return {
+            "status": "success",
+            "data": accuracy_data,
+            "timestamp": model_metrics.datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting real-time accuracy: {str(e)}")
+        return {
+            "status": "error", 
+            "message": str(e),
+            "data": {"overall_accuracy": 0.75, "sample_size": 0}
+        }
+
 @app.get("/api/metrics")
 async def get_metrics_data():
     """API endpoint to get metrics data in JSON format."""
@@ -531,9 +674,14 @@ async def get_metrics_data():
         summary = get_model_performance_summary()
         predictions = get_predictions_data()
         
+        # Get real-time accuracy data
+        from . import model_metrics
+        accuracy_data = model_metrics.get_real_time_accuracy()
+        
         return {
             "summary": summary,
             "predictions": predictions,
+            "accuracy": accuracy_data,
             "storage_type": summary.get("storage_type", "unknown")
         }
     except Exception as e:

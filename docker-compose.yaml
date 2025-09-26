@@ -53,6 +53,7 @@ services:
       - firefly_iii
 
   ai-service:
+    image: ${DOCKER_USERNAME:-hamadfyad}/firefly-ai-categorizer:${AI_SERVICE_TAG:-latest}
     build:
       context: ./firefly-ai-categorizer
     container_name: firefly_iii_ai_service
@@ -101,6 +102,7 @@ services:
       - firefly_iii
 
   webhook-service:
+    image: ${DOCKER_USERNAME:-hamadfyad}/firefly-webhook-service:${WEBHOOK_SERVICE_TAG:-latest}
     build:
       context: ./webhook_service
     container_name: firefly_iii_webhook_service

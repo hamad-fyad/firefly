@@ -23,6 +23,8 @@ def get_openai_client() -> Optional[OpenAI]:
         return None
     
     try:
+        if OpenAI(api_key=api_key):
+            logger.info("OpenAI client initialized successfully")
         return OpenAI(api_key=api_key)
     except Exception as e:
         logger.error("Failed to initialize OpenAI client: %s", str(e))
@@ -31,6 +33,19 @@ def get_openai_client() -> Optional[OpenAI]:
 class ModelError(Exception):
     """Custom exception for model-related errors."""
     pass
+
+def get_few_shot_examples_text() -> str:
+    """Generate few-shot examples text for better categorization"""
+    examples_text = """
+Examples:
+- "TESCO GROCERY STORE" → Groceries (confidence: 0.95)
+- "Uber Trip to Airport" → Transport (confidence: 0.92)
+- "Netflix Monthly Subscription" → Entertainment (confidence: 0.90)
+- "British Gas Bill Payment" → Bills (confidence: 0.88)
+- "Amazon Purchase" → Shopping (confidence: 0.85)
+- "ATM Cash Withdrawal" → Other (confidence: 0.70)
+"""
+    return examples_text.strip()
 
 def load_model() -> Optional[Dict[str, Any]]:
     """
@@ -138,8 +153,26 @@ def predict_category(description: str) -> str:
         # Get OpenAI client
         client = get_openai_client()
         if not client:
-            logger.warning("OpenAI client not available, returning default category")
-            return "Uncategorized"
+            logger.warning("OpenAI client not available, using fallback categorization")
+            fallback_category = fallback_categorization(description)
+            
+            # Record the fallback prediction
+            confidence = 0.6
+            metadata = model_manager.load_metadata()
+            current_version = metadata.get("current_version", "fallback-v1") if metadata else "fallback-v1"
+            
+            try:
+                model_metrics.record_prediction(
+                    version_id=current_version,
+                    description=description,
+                    predicted_category=fallback_category,
+                    confidence=confidence
+                )
+                logger.info("Recorded fallback prediction (no OpenAI): '%s' -> '%s'", description, fallback_category)
+            except Exception as metrics_error:
+                logger.error("Failed to record fallback prediction metrics: %s", str(metrics_error))
+            
+            return fallback_category
 
         # Get available categories (you might want to make this configurable)
         available_categories = [
@@ -149,37 +182,90 @@ def predict_category(description: str) -> str:
             "AI & Tech","Bank Fees", "Healthcare", "Housing", "Income", "Investment", "Education", "Travel", "Insurance", "Charity", "Other"
         ]
 
-        # Create the prompt
-        prompt = create_categorization_prompt(description, available_categories)
+        # Enhanced prompt to get confidence scores
+        enhanced_prompt = f"""You are an AI assistant that categorizes financial transactions. Based on the transaction description, choose the most appropriate category and provide a confidence score.
 
-        # Call OpenAI API
+Available Categories: {', '.join(available_categories)}
+
+Here are some examples:
+{get_few_shot_examples_text()}
+
+Now categorize this transaction:
+Description: {description}
+
+Respond in this EXACT JSON format:
+{{
+    "category": "chosen_category_name",
+    "confidence": 0.95,
+    "reasoning": "brief explanation why this category fits"
+}}
+
+The confidence should be between 0.0 and 1.0, where:
+- 0.9-1.0: Very confident (clear indicators)
+- 0.7-0.9: Confident (good match)
+- 0.5-0.7: Moderate confidence (some uncertainty)
+- 0.0-0.5: Low confidence (unclear/ambiguous)"""
+
+        # Call OpenAI API with enhanced prompt
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",  # You can use gpt-4 for better accuracy
             messages=[
-                {"role": "system", "content": "You are a financial transaction categorization assistant. Respond with only the category name."},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": "You are a financial transaction categorization expert. Always respond with valid JSON containing category, confidence, and reasoning."},
+                {"role": "user", "content": enhanced_prompt}
             ],
-            max_tokens=50,
+            max_tokens=150,
             temperature=0.1,  # Low temperature for consistent results
             timeout=30
         )
 
-        predicted_category = response.choices[0].message.content.strip()
+        try:
+            # Parse the JSON response
+            response_text = response.choices[0].message.content.strip()
+            # Remove any markdown formatting if present
+            if response_text.startswith("```json"):
+                response_text = response_text[7:-3].strip()
+            elif response_text.startswith("```"):
+                response_text = response_text[3:-3].strip()
+            
+            prediction_data = json.loads(response_text)
+            predicted_category = prediction_data.get("category", "Other")
+            confidence = float(prediction_data.get("confidence", 0.7))
+            reasoning = prediction_data.get("reasoning", "")
+            
+            logger.info(f"OpenAI prediction: '{description}' -> '{predicted_category}' (confidence: {confidence:.2f}) - {reasoning}")
+            
+        except (json.JSONDecodeError, ValueError, KeyError) as e:
+            logger.warning(f"Failed to parse OpenAI JSON response: {e}. Falling back to simple parsing.")
+            # Fallback to simple text parsing
+            response_text = response.choices[0].message.content.strip()
+            predicted_category = response_text.split('\n')[0] if '\n' in response_text else response_text
+            confidence = 0.7  # Default confidence if parsing fails
+            reasoning = "Parsed from simple text response"
         
         # Validate that the response is one of our available categories
         if predicted_category not in available_categories:
             # Try to find the closest match
             predicted_category_lower = predicted_category.lower()
+            original_confidence = confidence
             for cat in available_categories:
                 if cat.lower() in predicted_category_lower or predicted_category_lower in cat.lower():
                     predicted_category = cat
                     break
             else:
-                # If no match found, default to a reasonable category
+                # If no match found, default to a reasonable category and reduce confidence
                 predicted_category = "Other"
+                confidence = max(0.3, confidence * 0.5)  # Reduce confidence due to category mismatch
+                logger.warning(f"Category not in available list, defaulting to 'Other' and reducing confidence from {original_confidence:.2f} to {confidence:.2f}")
+
+        # Enhance confidence with historical data
+        dynamic_confidence = model_metrics.get_dynamic_confidence(description, predicted_category)
+        # Combine OpenAI confidence with historical accuracy (weighted average)
+        final_confidence = 0.6 * confidence + 0.4 * dynamic_confidence
+        final_confidence = max(0.3, min(0.95, final_confidence))  # Keep in reasonable range
+        
+        logger.info(f"Final confidence: OpenAI={confidence:.2f}, Historical={dynamic_confidence:.2f}, Combined={final_confidence:.2f}")
 
         # Record the prediction
-        confidence = 0.9  # OpenAI predictions are generally high confidence
         metadata = model_manager.load_metadata()
         current_version = metadata.get("current_version") if metadata else "openai-v1"
         
@@ -187,7 +273,7 @@ def predict_category(description: str) -> str:
             version_id=current_version,
             description=description,
             predicted_category=predicted_category,
-            confidence=confidence
+            confidence=final_confidence
         )
 
         logger.info("Successfully predicted category '%s' with OpenAI", predicted_category)
@@ -195,29 +281,105 @@ def predict_category(description: str) -> str:
 
     except Exception as e:
         logger.error("Error during OpenAI prediction: %s", str(e))
-        # Fallback to basic categorization logic
-        return fallback_categorization(description)
+        
+        try:
+            # Fallback to basic categorization logic
+            fallback_category = fallback_categorization(description)
+            logger.info("Using fallback categorization due to OpenAI error: '%s' -> '%s'", description, fallback_category)
+            
+            # Record the fallback prediction with lower confidence
+            confidence = 0.6  # Lower confidence for fallback predictions
+            
+            try:
+                metadata = model_manager.load_metadata()
+                current_version = metadata.get("current_version", "fallback-v1") if metadata else "fallback-v1"
+            except Exception:
+                current_version = "fallback-v1"
+            
+            try:
+                model_metrics.record_prediction(
+                    version_id=current_version,
+                    description=description,
+                    predicted_category=fallback_category,
+                    confidence=confidence
+                )
+                logger.info("Recorded fallback prediction: '%s' -> '%s'", description, fallback_category)
+            except Exception as metrics_error:
+                logger.error("Failed to record fallback prediction metrics: %s", str(metrics_error))
+            
+            return fallback_category
+            
+        except Exception as fallback_error:
+            logger.error("CRITICAL: Even fallback categorization failed: %s", str(fallback_error))
+            # Last resort - return a safe default
+            return "Other"
 
 def fallback_categorization(description: str) -> str:
     """
     Fallback categorization when OpenAI is unavailable.
-    Uses simple keyword matching.
+    Uses simple keyword matching with comprehensive rules.
     """
+    if not description:
+        return "Other"
+        
     description_lower = description.lower()
     
-    # Simple keyword-based categorization
-    if any(word in description_lower for word in ['food', 'restaurant', 'grocery', 'coffee', 'lunch', 'dinner', 'breakfast']):
+    # Food & Drink
+    food_keywords = ['food', 'restaurant', 'grocery', 'coffee', 'lunch', 'dinner', 'breakfast', 
+                     'cafe', 'pizza', 'burger', 'sushi', 'bar', 'pub', 'bakery', 'deli', 
+                     'market', 'supermarket', 'mcdonald', 'starbucks', 'subway', 'kfc']
+    if any(word in description_lower for word in food_keywords):
         return "Food & Drink"
-    elif any(word in description_lower for word in ['gas', 'fuel', 'uber', 'taxi', 'bus', 'train', 'parking']):
+    
+    # Transportation
+    transport_keywords = ['gas', 'fuel', 'uber', 'taxi', 'bus', 'train', 'parking', 'metro',
+                         'airport', 'flight', 'airline', 'car', 'vehicle', 'toll', 'petrol',
+                         'lyft', 'station', 'transport', 'ferry', 'bike']
+    if any(word in description_lower for word in transport_keywords):
         return "Transportation"
-    elif any(word in description_lower for word in ['gym', 'fitness', 'health', 'doctor', 'pharmacy', 'medical']):
+    
+    # Health & Fitness
+    health_keywords = ['gym', 'fitness', 'health', 'doctor', 'pharmacy', 'medical', 'hospital',
+                      'clinic', 'dentist', 'medicine', 'prescription', 'wellness', 'therapy',
+                      'yoga', 'massage', 'spa', 'sport']
+    if any(word in description_lower for word in health_keywords):
         return "Health & Fitness"
-    elif any(word in description_lower for word in ['amazon', 'shopping', 'store', 'purchase', 'buy', 'bought']):
+    
+    # Shopping
+    shopping_keywords = ['amazon', 'shopping', 'store', 'purchase', 'buy', 'bought', 'shop',
+                        'retail', 'mall', 'outlet', 'ebay', 'walmart', 'target', 'costco',
+                        'clothes', 'clothing', 'fashion', 'electronics']
+    if any(word in description_lower for word in shopping_keywords):
         return "Shopping"
-    elif any(word in description_lower for word in ['electric', 'water', 'gas bill', 'internet', 'phone', 'utility']):
+    
+    # Bills & Utilities
+    utility_keywords = ['electric', 'water', 'gas bill', 'internet', 'phone', 'utility',
+                       'bill', 'payment', 'subscription', 'netflix', 'spotify', 'cable',
+                       'insurance', 'rent', 'mortgage', 'loan']
+    if any(word in description_lower for word in utility_keywords):
         return "Bills & Utilities"
-    else:
-        return "Other"
+    
+    # Entertainment
+    entertainment_keywords = ['movie', 'cinema', 'theater', 'game', 'entertainment', 'concert',
+                             'music', 'streaming', 'netflix', 'youtube', 'book', 'magazine']
+    if any(word in description_lower for word in entertainment_keywords):
+        return "Entertainment"
+    
+    # Income (transfers, salary, etc.)
+    income_keywords = ['salary', 'wage', 'payroll', 'transfer', 'deposit', 'refund', 'cashback',
+                      'dividend', 'interest', 'bonus', 'income', 'payment received']
+    if any(word in description_lower for word in income_keywords):
+        return "Income"
+    
+    # Bank Fees
+    fee_keywords = ['fee', 'charge', 'atm', 'overdraft', 'maintenance', 'service charge',
+                   'penalty', 'commission', 'bank fee']
+    if any(word in description_lower for word in fee_keywords):
+        return "Bank Fees"
+    
+    # Default fallback
+    logger.info("No keyword match found for description: '%s', categorizing as 'Other'", description)
+    return "Other"
 
 def evaluate_model(model_data, X_test, y_test) -> Dict[str, Any]:
     """

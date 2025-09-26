@@ -1,5 +1,10 @@
-# Test Configuration for Firefly III AI Integration
-# This file extends the existing config.py with additional test settings
+"""
+Test Configuration and Environment Management
+
+Manages test environment configuration, service endpoints, and test data setup.
+Handles differences between local development, CI/CD, and production test environments
+to ensure tests run consistently across all deployment scenarios.
+"""
 
 import os
 import sys
