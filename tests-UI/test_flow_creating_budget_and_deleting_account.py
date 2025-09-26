@@ -29,26 +29,31 @@ class FireflyBudgetTest(unittest.TestCase):
 
 
     def setUp(self):
-        
         self.name = "test_name_" + str(datetime.datetime.now())
-        
+
         headless = str(os.environ.get("HEADLESS", "false")).lower() in ("true", "1")
         options = webdriver.ChromeOptions()
 
         if headless:
             options.add_argument('--headless=new')
-            options.add_argument('--no-sandbox') # This option is used to run Chrome in headless mode without a sandbox, which is useful for CI environments.
-            options.add_argument('--disable-dev-shm-usage') # This option makes Chrome store temporary data on disk instead of shared memory, avoiding crashes in low-/dev/shm environments.
-            options.add_argument("--start-maximized")
+            options.add_argument('--no-sandbox')
+            options.add_argument('--disable-dev-shm-usage')
+            options.add_argument("--window-size=1920,1080")  # ✅ works instead of maximize
+        else:
+            options.add_argument("--start-maximized")  # GUI mode can use maximize
+
         # ✅ Unique Chrome user profile
         user_data_dir = tempfile.mkdtemp()
         options.add_argument(f"--user-data-dir={user_data_dir}")
 
         self.driver = webdriver.Chrome(options=options)
-       
         self.driver.get(firefly + "/register")
-        self.driver.maximize_window()
-        self.driver.implicitly_wait(10) 
+
+        if not headless:
+            self.driver.maximize_window()  # only call in GUI mode
+
+        self.driver.implicitly_wait(10)
+
 
 
     def test_create_budget(self):
@@ -68,6 +73,12 @@ class FireflyBudgetTest(unittest.TestCase):
 
     def tearDown(self):
         self.driver.quit()
+        if hasattr(self, "user_data_dir"):
+            try:
+                import shutil
+                shutil.rmtree(self.user_data_dir, ignore_errors=True)
+            except Exception:
+                pass
 
         
 if __name__ == "__main__":

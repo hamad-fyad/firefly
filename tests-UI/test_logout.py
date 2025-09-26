@@ -30,14 +30,22 @@ class Fireflylogout(unittest.TestCase):
             options.add_argument('--headless=new')
             options.add_argument('--no-sandbox')
             options.add_argument('--disable-dev-shm-usage')
+            options.add_argument("--window-size=1920,1080")  # ✅ instead of maximize
+        else:
+            options.add_argument("--start-maximized")  # ✅ GUI mode
 
         # ✅ Unique Chrome user profile
-        user_data_dir = tempfile.mkdtemp()
-        options.add_argument(f"--user-data-dir={user_data_dir}")
+        self.user_data_dir = tempfile.mkdtemp()
+        options.add_argument(f"--user-data-dir={self.user_data_dir}")
 
         self.driver = webdriver.Chrome(options=options)
         self.driver.get(firefly + "/login")
-        self.driver.maximize_window()
+
+        if not headless:
+            self.driver.maximize_window()  # ✅ only call in GUI mode
+
+        self.driver.implicitly_wait(10)
+
 
     def test_logout(self):
         # Login as a valid user
@@ -51,7 +59,12 @@ class Fireflylogout(unittest.TestCase):
         self.driver.implicitly_wait(5) # Wait for logout to complete
         self.assertIn("Login", self.driver.title) 
 
-
     def tearDown(self):
         self.driver.quit()
+        if hasattr(self, "user_data_dir"):
+            try:
+                import shutil
+                shutil.rmtree(self.user_data_dir, ignore_errors=True)
+            except Exception:
+                pass
 
