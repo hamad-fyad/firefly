@@ -146,6 +146,8 @@ def record_prediction(
     actual_category: str = None
 ) -> None:
     """Record individual prediction details (database first, then file fallback)."""
+    logger.info(f"📊 METRICS: Recording prediction - '{description}' -> '{predicted_category}' (confidence: {confidence})")
+    
     # Try database first
     if DATABASE_AVAILABLE:
         try:
@@ -161,10 +163,15 @@ def record_prediction(
                 session.add(db_prediction)
                 session.commit()
                 session.close()
-                logger.debug("Recorded prediction to database for version %s", version_id)
+                logger.info(f"✅ METRICS: Successfully recorded prediction to DATABASE for version {version_id}")
                 return
+            else:
+                logger.warning("⚠️ METRICS: Database session is None, falling back to file storage")
         except Exception as e:
-            logger.error(f"Database prediction storage failed: {str(e)}")
+            logger.error(f"❌ METRICS: Database prediction storage failed: {str(e)}")
+            logger.info("🔄 METRICS: Attempting file storage fallback...")
+    else:
+        logger.info("📁 METRICS: Database not available, using file storage")
     
     # Fallback to file storage
     try:
@@ -182,10 +189,12 @@ def record_prediction(
         
         data["predictions"].append(prediction_record)
         save_metrics_data(data)
-        logger.debug("Recorded prediction for version %s", version_id)
+        logger.info(f"✅ METRICS: Successfully recorded prediction to FILE for version {version_id}")
+        logger.info(f"📊 METRICS: Total predictions in file: {len(data['predictions'])}")
         
     except Exception as e:
-        logger.error("Failed to record prediction: %s", str(e))
+        logger.error(f"❌ METRICS: Failed to record prediction to file storage: {str(e)}")
+        logger.error(f"🚨 METRICS: CRITICAL - Prediction not recorded anywhere!")
         # Don't raise here as this shouldn't break prediction flow
 
 def get_model_performance_summary() -> Dict[str, Any]:
@@ -345,6 +354,8 @@ def get_model_performance_summary() -> Dict[str, Any]:
 
 def get_predictions_data() -> List[Dict[str, Any]]:
     """Get all predictions data (database or file)."""
+    logger.info("📊 METRICS: Loading predictions data for dashboard...")
+    
     if DATABASE_AVAILABLE:
         try:
             session = get_database_session()
@@ -352,7 +363,7 @@ def get_predictions_data() -> List[Dict[str, Any]]:
                 predictions = session.query(PredictionLogs).order_by(desc(PredictionLogs.timestamp)).all()
                 session.close()
                 
-                return [{
+                predictions_list = [{
                     "version_id": pred.version_id,
                     "timestamp": pred.timestamp.isoformat(),
                     "description": pred.description,
@@ -360,15 +371,31 @@ def get_predictions_data() -> List[Dict[str, Any]]:
                     "confidence": pred.confidence,
                     "actual_category": pred.actual_category
                 } for pred in predictions]
+                
+                logger.info(f"✅ METRICS: Loaded {len(predictions_list)} predictions from DATABASE")
+                return predictions_list
+            else:
+                logger.warning("⚠️ METRICS: Database session is None, trying file storage")
         except Exception as e:
-            logger.error(f"Database query failed: {str(e)}")
+            logger.error(f"❌ METRICS: Database query failed: {str(e)}")
+            logger.info("🔄 METRICS: Falling back to file storage...")
+    else:
+        logger.info("📁 METRICS: Database not available, using file storage")
     
     # Fallback to file storage
     try:
         data = load_metrics_data()
-        return data.get("predictions", [])
+        predictions = data.get("predictions", [])
+        logger.info(f"✅ METRICS: Loaded {len(predictions)} predictions from FILE")
+        
+        if len(predictions) == 0:
+            logger.warning("⚠️ METRICS: No predictions found in file storage!")
+            logger.info(f"📁 METRICS: File location: {METRICS_FILE}")
+            logger.info(f"📊 METRICS: File exists: {METRICS_FILE.exists()}")
+        
+        return predictions
     except Exception as e:
-        logger.error(f"Failed to load predictions data: {str(e)}")
+        logger.error(f"❌ METRICS: Failed to load predictions data: {str(e)}")
         return []
 
 def record_accuracy_feedback(prediction_id: int, predicted_category: str, actual_category: str, 
@@ -397,6 +424,9 @@ def record_accuracy_feedback(prediction_id: int, predicted_category: str, actual
                 return True
     except Exception as e:
         logger.error(f"Failed to record accuracy feedback: {str(e)}")
+        # If it's a table not found error, log it but continue
+        if "does not exist" in str(e) or "relation" in str(e):
+            logger.warning("Database tables not initialized yet, skipping accuracy feedback")
     
     return False
 
@@ -452,6 +482,9 @@ def get_dynamic_confidence(description: str, predicted_category: str) -> float:
         
     except Exception as e:
         logger.error(f"Failed to calculate dynamic confidence: {str(e)}")
+        # If it's a table not found error, log it but continue
+        if "does not exist" in str(e) or "relation" in str(e):
+            logger.warning("Database tables not initialized yet, using default confidence")
         return 0.7  # Default fallback
 
 def get_real_time_accuracy() -> Dict[str, float]:
@@ -509,4 +542,7 @@ def get_real_time_accuracy() -> Dict[str, float]:
         
     except Exception as e:
         logger.error(f"Failed to calculate real-time accuracy: {str(e)}")
+        # If it's a table not found error, log it but continue
+        if "does not exist" in str(e) or "relation" in str(e):
+            logger.warning("Database tables not initialized yet, using default accuracy")
         return {"overall_accuracy": 0.75, "sample_size": 0}

@@ -17,17 +17,41 @@ DATA_FILE = Path("/app/data/training_feedback.json")
 # Initialize OpenAI client
 def get_openai_client() -> Optional[OpenAI]:
     """Initialize OpenAI client with API key."""
+    logger.debug("🔑 Attempting to initialize OpenAI client...")
+    
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        logger.warning("OPENAI_API_KEY not found in environment variables")
+        logger.error("❌ OPENAI_API_KEY not found in environment variables")
+        logger.info("💡 Set OPENAI_API_KEY environment variable to enable AI categorization")
         return None
     
+    # Log the first/last 4 characters of the API key for verification
+    key_preview = f"{api_key[:4]}...{api_key[-4:]}" if len(api_key) > 8 else "[short_key]"
+    logger.info(f"🔑 Found OpenAI API key: {key_preview}")
+    
     try:
-        if OpenAI(api_key=api_key):
-            logger.info("OpenAI client initialized successfully")
-        return OpenAI(api_key=api_key)
+        client = OpenAI(api_key=api_key)
+        logger.info("✅ OpenAI client initialized successfully")
+        
+        # Test the client with a simple call
+        try:
+            test_response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": "test"}],
+                max_tokens=1,
+                timeout=5
+            )
+            logger.info("✅ OpenAI API test call successful")
+        except Exception as test_error:
+            logger.warning(f"⚠️ OpenAI API test failed: {str(test_error)}")
+            if "insufficient_quota" in str(test_error):
+                logger.error("❌ OpenAI quota exceeded - check your billing")
+            elif "invalid" in str(test_error).lower():
+                logger.error("❌ Invalid OpenAI API key")
+            
+        return client
     except Exception as e:
-        logger.error("Failed to initialize OpenAI client: %s", str(e))
+        logger.error(f"❌ Failed to initialize OpenAI client: {str(e)}")
         return None
 
 class ModelError(Exception):
@@ -146,9 +170,16 @@ def predict_category(description: str) -> str:
     Raises:
         ModelError: If prediction fails
     """
+    logger.info(f"🧠 Starting AI categorization for: '{description}'")
+    prediction_start_time = time.time()
+    
     try:
         if not description:
+            logger.error("❌ Empty description provided")
             raise ValueError("Description cannot be empty")
+            
+        if len(description.strip()) < 2:
+            logger.warning(f"⚠️ Very short description: '{description}' - may affect accuracy")
 
         # Get OpenAI client
         client = get_openai_client()
@@ -207,32 +238,71 @@ The confidence should be between 0.0 and 1.0, where:
 - 0.0-0.5: Low confidence (unclear/ambiguous)"""
 
         # Call OpenAI API with enhanced prompt
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",  # You can use gpt-4 for better accuracy
-            messages=[
-                {"role": "system", "content": "You are a financial transaction categorization expert. Always respond with valid JSON containing category, confidence, and reasoning."},
-                {"role": "user", "content": enhanced_prompt}
-            ],
-            max_tokens=150,
-            temperature=0.1,  # Low temperature for consistent results
-            timeout=30
-        )
+        logger.info(f"🤖 Calling OpenAI API with description: '{description[:50]}{'...' if len(description) > 50 else ''}'")
+        logger.debug(f"📋 Available categories: {len(available_categories)} options")
+        
+        api_start_time = time.time()
+        
+        try:
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",  # You can use gpt-4 for better accuracy
+                messages=[
+                    {"role": "system", "content": "You are a financial transaction categorization expert. Always respond with valid JSON containing category, confidence, and reasoning."},
+                    {"role": "user", "content": enhanced_prompt}
+                ],
+                max_tokens=150,
+                temperature=0.1,  # Low temperature for consistent results
+                timeout=30
+            )
+            
+            api_duration = time.time() - api_start_time
+            logger.info(f"✅ OpenAI API call completed in {api_duration:.2f}s")
+            
+        except Exception as api_error:
+            api_duration = time.time() - api_start_time
+            logger.error(f"❌ OpenAI API call failed after {api_duration:.2f}s: {str(api_error)}")
+            
+            if "timeout" in str(api_error).lower():
+                logger.error("⏰ API timeout - consider increasing timeout or checking network")
+            elif "rate_limit" in str(api_error).lower() or "429" in str(api_error):
+                logger.error("🚫 Rate limit exceeded - slow down requests")
+            elif "insufficient_quota" in str(api_error).lower():
+                logger.error("💳 Quota exceeded - check OpenAI billing")
+            elif "invalid" in str(api_error).lower():
+                logger.error("🔑 Invalid API key or request format")
+                
+            raise api_error
 
         try:
             # Parse the JSON response
             response_text = response.choices[0].message.content.strip()
+            logger.debug(f"📥 Raw OpenAI response: {response_text}")
+            
             # Remove any markdown formatting if present
+            original_response = response_text
             if response_text.startswith("```json"):
                 response_text = response_text[7:-3].strip()
+                logger.debug("🔧 Removed JSON markdown formatting")
             elif response_text.startswith("```"):
                 response_text = response_text[3:-3].strip()
+                logger.debug("🔧 Removed generic markdown formatting")
             
-            prediction_data = json.loads(response_text)
+            logger.debug(f"📋 Cleaned response text: {response_text}")
+            
+            try:
+                prediction_data = json.loads(response_text)
+                logger.debug(f"✅ Successfully parsed JSON: {prediction_data}")
+            except json.JSONDecodeError as json_err:
+                logger.error(f"❌ JSON parsing failed: {str(json_err)}")
+                logger.error(f"🔍 Problematic text: '{response_text}'")
+                raise json_err
+            
             predicted_category = prediction_data.get("category", "Other")
             confidence = float(prediction_data.get("confidence", 0.7))
             reasoning = prediction_data.get("reasoning", "")
             
-            logger.info(f"OpenAI prediction: '{description}' -> '{predicted_category}' (confidence: {confidence:.2f}) - {reasoning}")
+            logger.info(f"🎯 OpenAI prediction: '{description}' -> '{predicted_category}' (confidence: {confidence:.2f})")
+            logger.debug(f"💭 AI reasoning: {reasoning}")
             
         except (json.JSONDecodeError, ValueError, KeyError) as e:
             logger.warning(f"Failed to parse OpenAI JSON response: {e}. Falling back to simple parsing.")

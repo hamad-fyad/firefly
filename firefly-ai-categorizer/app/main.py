@@ -3,15 +3,66 @@ from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import httpx
 import logging
+import time
 from app.ai_model import predict_category, retrain_model
 from app.feedback_storage import save_feedback
-from app.model_metrics import get_model_performance_summary, get_predictions_data
+from app.model_metrics import get_model_performance_summary, get_predictions_data, initialize_metrics_storage
 import dotenv, os
 
 # Set up logging
 logger = logging.getLogger(__name__)
 app = FastAPI()
 dotenv.load_dotenv()
+
+# Initialize database and metrics storage on startup
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database and metrics storage on application startup."""
+    logger.info("🚀 Initializing AI Categorizer service...")
+    
+    # Check environment variables
+    import os
+    openai_key = os.getenv("OPENAI_API_KEY")
+    firefly_token = os.getenv("FIREFLY_TOKEN")
+    
+    if openai_key:
+        key_preview = f"{openai_key[:4]}...{openai_key[-4:]}" if len(openai_key) > 8 else "[short_key]"
+        logger.info(f"✅ OpenAI API key found: {key_preview} (length: {len(openai_key)})")
+        if not openai_key.startswith("sk-"):
+            logger.warning("⚠️ OpenAI API key should start with 'sk-'")
+    else:
+        logger.error("❌ OPENAI_API_KEY not found in environment")
+    
+    if firefly_token:
+        token_preview = f"{firefly_token[:8]}...{firefly_token[-4:]}" if len(firefly_token) > 12 else "[short_token]"
+        logger.info(f"✅ Firefly token found: {token_preview} (length: {len(firefly_token)})")
+    else:
+        logger.error("❌ FIREFLY_TOKEN not found in environment")
+    
+    logger.info(f"🔗 Firefly API endpoint: {FIREFFLY_API}")
+    
+    # Test OpenAI client
+    try:
+        from app.ai_model import get_openai_client
+        client = get_openai_client()
+        if client:
+            logger.info("✅ OpenAI client initialized successfully")
+        else:
+            logger.warning("⚠️ OpenAI client initialization failed")
+    except Exception as openai_error:
+        logger.error(f"❌ OpenAI client error: {str(openai_error)}")
+    
+    try:
+        # Initialize metrics storage (will try database first, fallback to file)
+        initialize_metrics_storage()
+        logger.info("✅ Metrics storage initialized successfully")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize metrics storage: {str(e)}")
+        logger.info("⚠️ Service will continue with limited functionality")
+    
+    logger.info("🎉 AI Categorizer service startup complete")
+    logger.info("💡 Use /test-ai endpoint to test ChatGPT integration")
+    logger.info("🔍 Use /debug-env endpoint to check environment configuration")
 FIREFFLY_API = "http://app:8080/api/v1"
 FIREFFLY_TOKEN = os.environ.get("FIREFLY_TOKEN")
 HEADERS = {"Authorization": f"Bearer {FIREFFLY_TOKEN}"}
@@ -47,48 +98,135 @@ async def health_check():
             model_status = "fallback"
             model_type = "keywords"
             
-        return {"status": "healthy", "model_status": model_status, "model_type": model_type}
+        # Check database status
+        database_status = "unknown"
+        try:
+            from app.database import test_connection
+            if test_connection():
+                database_status = "available"
+            else:
+                database_status = "unavailable"
+        except Exception as db_error:
+            database_status = "error"
+            
+        return {
+            "status": "healthy", 
+            "model_status": model_status, 
+            "model_type": model_type,
+            "database_status": database_status,
+            "storage_mode": "database" if database_status == "available" else "file"
+        }
         
     except Exception as e:
         return {
-            "status": "healthy",  # Still healthy even without model
+            "status": "healthy",  # Still healthy even without model/database
             "model_status": "error",
+            "database_status": "error",
             "detail": str(e)
         }
 
 @app.post("/incoming")
 async def incoming_event(request: Request):
-    data = await request.json()
+    logger.info("🔄 Received new transaction for categorization")
+    
+    try:
+        data = await request.json()
+        logger.debug(f"📥 Incoming payload keys: {list(data.keys())}")
+    except Exception as json_error:
+        logger.error(f"❌ Failed to parse JSON payload: {str(json_error)}")
+        return JSONResponse(status_code=400, content={"status": "error", "detail": "Invalid JSON payload"})
+    
     if "content" not in data or "transactions" not in data["content"]:
+        logger.error("❌ Missing 'content' or 'transactions' in payload")
+        logger.debug(f"🔍 Available payload structure: {data}")
         return JSONResponse(status_code=400, content={"status": "error", "detail": "Missing content or transactions in payload"})
 
     transactions = data["content"]["transactions"]
+    logger.info(f"📊 Processing {len(transactions)} transaction(s)")
+    
     if not transactions or "transaction_journal_id" not in transactions[0] or "description" not in transactions[0]:
+        logger.error("❌ Missing transaction_journal_id or description in first transaction")
+        logger.debug(f"🔍 Transaction structure: {transactions[0] if transactions else 'No transactions'}")
         return JSONResponse(status_code=400, content={"status": "error", "detail": "Missing transaction_journal_id or description in payload"})
 
     tx_id = transactions[0]["transaction_journal_id"]
     tx_desc = transactions[0]["description"]
-
-    # predict_category now handles all fallbacks internally and never raises exceptions
-    ai_category = predict_category(tx_desc)
-    confidence = 0.85  # Default confidence for successful predictions
     
-    print(f"✅ Transaction categorized: '{tx_desc}' -> '{ai_category}'")
+    logger.info(f"🏷️ Processing transaction {tx_id}: '{tx_desc}'")
 
+    # AI Categorization with detailed logging
+    logger.info("🤖 Starting AI categorization process")
+    categorization_start = time.time()
+    
+    try:
+        ai_category = predict_category(tx_desc)
+        categorization_time = time.time() - categorization_start
+        confidence = 0.85  # Default confidence for successful predictions
+        
+        logger.info(f"✅ AI categorization completed in {categorization_time:.2f}s")
+        logger.info(f"🎯 Result: '{tx_desc}' -> '{ai_category}' (confidence: {confidence})")
+        
+    except Exception as ai_error:
+        categorization_time = time.time() - categorization_start
+        logger.error(f"❌ AI categorization failed after {categorization_time:.2f}s: {str(ai_error)}")
+        ai_category = "Uncategorized"
+        confidence = 0.5
+        logger.warning(f"🔄 Using fallback category: '{ai_category}'")
+        
+        # IMPORTANT: Record the fallback prediction in metrics since predict_category() failed
+        try:
+            from app.model_metrics import record_prediction
+            from app import model_manager
+            
+            # Get current model version for metrics
+            try:
+                metadata = model_manager.load_metadata()
+                current_version = metadata.get("current_version", "fallback-error-v1") if metadata else "fallback-error-v1"
+            except Exception:
+                current_version = "fallback-error-v1"
+            
+            # Record the fallback prediction
+            record_prediction(
+                version_id=current_version,
+                description=tx_desc,
+                predicted_category=ai_category,
+                confidence=confidence
+            )
+            logger.info(f"📊 Recorded fallback prediction metrics: '{tx_desc}' -> '{ai_category}' (confidence: {confidence})")
+            
+        except Exception as metrics_error:
+            logger.error(f"❌ Failed to record fallback prediction metrics: {str(metrics_error)}")
+            logger.warning("🔍 This may explain why metrics don't show for failed predictions")    # Firefly III Integration
+    logger.info("🔗 Connecting to Firefly III API")
+    firefly_start = time.time()
+    
     async with httpx.AsyncClient() as client:
         try:
+            logger.debug(f"📡 Fetching categories from: {FIREFFLY_API}/categories")
             resp = await client.get(f"{FIREFFLY_API}/categories", headers=HEADERS)
+            firefly_time = time.time() - firefly_start
+            
+            logger.info(f"📡 Firefly API response: {resp.status_code} in {firefly_time:.2f}s")
+            
             if resp.status_code == 302:
-                # Authentication failed - token expired/invalid
-                print(f"⚠️  Firefly III authentication failed (302 redirect). Token may be expired.")
+                logger.error("🔐 Firefly III authentication failed (302 redirect) - Token expired/invalid")
+                logger.warning("💡 Check FIREFLY_TOKEN environment variable")
                 return {
                     "status": "AI category predicted (auth required)", 
                     "category": ai_category, 
                     "confidence": confidence,
                     "message": "Category predicted but Firefly III requires re-authentication. Please check/update the API token."
                 }
+            elif resp.status_code == 401:
+                logger.error("🚫 Firefly III unauthorized (401) - Invalid token")
+                return {
+                    "status": "AI category predicted (unauthorized)", 
+                    "category": ai_category, 
+                    "confidence": confidence,
+                    "message": "Invalid Firefly III API token"
+                }
             elif resp.status_code != 200:
-                print(f"⚠️  Firefly III API error {resp.status_code}. Category '{ai_category}' predicted but not applied.")
+                logger.error(f"❌ Firefly III API error {resp.status_code}: {resp.text[:200]}")
                 return {
                     "status": "AI category predicted (API error)", 
                     "category": ai_category, 
@@ -689,3 +827,156 @@ async def get_metrics_data():
             status_code=500,
             content={"error": f"Failed to load metrics: {str(e)}"}
         )
+
+@app.post("/test-ai")
+async def test_ai_categorization(request: Request):
+    """
+    Test endpoint for diagnosing ChatGPT/OpenAI integration issues.
+    Use this to test AI categorization with detailed logging.
+    """
+    try:
+        data = await request.json()
+        test_description = data.get("description", "Test transaction from Starbucks")
+        
+        logger.info(f"🧪 TEST: Starting AI categorization test with: '{test_description}'")
+        
+        # Test OpenAI client first
+        from app.ai_model import get_openai_client
+        client = get_openai_client()
+        
+        if not client:
+            logger.error("🚨 TEST FAILED: OpenAI client is None")
+            return {
+                "status": "test_failed",
+                "error": "OpenAI client initialization failed",
+                "suggestions": [
+                    "Check OPENAI_API_KEY environment variable",
+                    "Verify API key is valid",
+                    "Check network connectivity"
+                ]
+            }
+        
+        logger.info("✅ TEST: OpenAI client initialized successfully")
+        
+        # Test categorization
+        start_time = time.time()
+        try:
+            category = predict_category(test_description)
+            duration = time.time() - start_time
+            
+            logger.info(f"✅ TEST: AI categorization successful in {duration:.2f}s")
+            
+            return {
+                "status": "test_passed",
+                "input_description": test_description,
+                "predicted_category": category,
+                "duration_seconds": duration,
+                "openai_client_status": "working",
+                "message": "ChatGPT integration is working properly"
+            }
+            
+        except Exception as prediction_error:
+            duration = time.time() - start_time
+            logger.error(f"🚨 TEST FAILED: Prediction error after {duration:.2f}s: {str(prediction_error)}")
+            
+            return {
+                "status": "test_failed",
+                "error": str(prediction_error),
+                "duration_seconds": duration,
+                "openai_client_status": "initialized_but_failed",
+                "suggestions": [
+                    "Check OpenAI API quota/billing",
+                    "Verify internet connectivity",
+                    "Check for API rate limits",
+                    "Review error logs for details"
+                ]
+            }
+            
+    except Exception as e:
+        logger.error(f"🚨 TEST ENDPOINT ERROR: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "test_error",
+                "error": str(e),
+                "message": "Test endpoint itself failed"
+            }
+        )
+
+@app.get("/debug-env")
+async def debug_environment():
+    """Debug endpoint to check environment configuration (without exposing secrets)."""
+    import os
+    from pathlib import Path
+    
+    # Check environment variables (safely)
+    openai_key_set = bool(os.getenv("OPENAI_API_KEY"))
+    firefly_token_set = bool(os.getenv("FIREFLY_TOKEN"))
+    
+    # Get key lengths for verification (without exposing actual keys)
+    openai_key_len = len(os.getenv("OPENAI_API_KEY", "")) if openai_key_set else 0
+    firefly_token_len = len(os.getenv("FIREFLY_TOKEN", "")) if firefly_token_set else 0
+    
+    # Check metrics storage
+    metrics_info = {}
+    try:
+        from app.model_metrics import METRICS_FILE, DATABASE_AVAILABLE
+        from app.database import test_connection
+        
+        # Database status
+        db_connected = test_connection() if DATABASE_AVAILABLE else False
+        
+        # File storage status
+        metrics_file_exists = METRICS_FILE.exists()
+        metrics_file_size = METRICS_FILE.stat().st_size if metrics_file_exists else 0
+        
+        # Load current metrics count
+        if metrics_file_exists:
+            try:
+                import json
+                with open(METRICS_FILE, 'r') as f:
+                    metrics_data = json.load(f)
+                predictions_count = len(metrics_data.get("predictions", []))
+                models_count = len(metrics_data.get("models", []))
+            except Exception:
+                predictions_count = "error"
+                models_count = "error"
+        else:
+            predictions_count = 0
+            models_count = 0
+        
+        metrics_info = {
+            "database_available": DATABASE_AVAILABLE,
+            "database_connected": db_connected,
+            "storage_mode": "database" if (DATABASE_AVAILABLE and db_connected) else "file",
+            "metrics_file_path": str(METRICS_FILE),
+            "metrics_file_exists": metrics_file_exists,
+            "metrics_file_size_bytes": metrics_file_size,
+            "predictions_count": predictions_count,
+            "models_count": models_count
+        }
+    except Exception as e:
+        metrics_info = {"error": str(e)}
+    
+    return {
+        "environment_check": {
+            "openai_api_key_set": openai_key_set,
+            "openai_key_length": openai_key_len,
+            "firefly_token_set": firefly_token_set,
+            "firefly_token_length": firefly_token_len,
+        },
+        "api_endpoints": {
+            "firefly_api": FIREFFLY_API,
+        },
+        "metrics_storage": metrics_info,
+        "suggestions": {
+            "openai_key": "Should be 51+ characters starting with 'sk-'" if openai_key_set else "Set OPENAI_API_KEY environment variable",
+            "firefly_token": "Should be 64+ characters" if firefly_token_set else "Set FIREFLY_TOKEN environment variable"
+        },
+        "test_commands": {
+            "test_ai": "POST /test-ai with {'description': 'test transaction'}",
+            "health_check": "GET /health",
+            "metrics": "GET /api/metrics",
+            "debug_env": "GET /debug-env (this endpoint)"
+        }
+    }
