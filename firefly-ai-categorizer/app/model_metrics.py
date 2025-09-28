@@ -386,12 +386,19 @@ def get_predictions_data() -> List[Dict[str, Any]]:
     try:
         data = load_metrics_data()
         predictions = data.get("predictions", [])
+        
+        # Sort by timestamp (most recent first) to ensure proper ordering
+        predictions.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+        
         logger.info(f"✅ METRICS: Loaded {len(predictions)} predictions from FILE")
         
         if len(predictions) == 0:
             logger.warning("⚠️ METRICS: No predictions found in file storage!")
             logger.info(f"📁 METRICS: File location: {METRICS_FILE}")
             logger.info(f"📊 METRICS: File exists: {METRICS_FILE.exists()}")
+        else:
+            # Log the most recent prediction for debugging
+            logger.info(f"📊 METRICS: Most recent prediction: {predictions[0].get('timestamp', 'No timestamp')} - {predictions[0].get('description', 'No description')[:50]}...")
         
         return predictions
     except Exception as e:

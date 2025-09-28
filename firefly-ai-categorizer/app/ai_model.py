@@ -185,10 +185,10 @@ def predict_category(description: str) -> str:
         client = get_openai_client()
         if not client:
             logger.warning("OpenAI client not available, using fallback categorization")
-            fallback_category = fallback_categorization(description)
+            fallback_category, fallback_confidence = fallback_categorization(description)
             
             # Record the fallback prediction
-            confidence = 0.6
+            confidence = fallback_confidence
             metadata = model_manager.load_metadata()
             current_version = metadata.get("current_version", "fallback-v1") if metadata else "fallback-v1"
             
@@ -231,11 +231,15 @@ Respond in this EXACT JSON format:
     "reasoning": "brief explanation why this category fits"
 }}
 
-The confidence should be between 0.0 and 1.0, where:
-- 0.9-1.0: Very confident (clear indicators)
-- 0.7-0.9: Confident (good match)
-- 0.5-0.7: Moderate confidence (some uncertainty)
-- 0.0-0.5: Low confidence (unclear/ambiguous)"""
+Confidence Guidelines (be specific and varied):
+- 0.95-1.0: Perfect match with clear keywords (e.g., "Starbucks coffee" -> Food & Drink)
+- 0.85-0.94: Very confident with strong indicators (e.g., "gym membership" -> Health & Fitness)
+- 0.75-0.84: Confident with good context clues (e.g., "monthly subscription" -> Bills & Utilities)
+- 0.65-0.74: Moderate confidence, some ambiguity (e.g., "Amazon purchase" -> Shopping)
+- 0.50-0.64: Lower confidence, unclear category (e.g., "payment" -> could be many categories)
+- 0.30-0.49: Low confidence, very ambiguous (e.g., "transfer" -> unclear purpose)
+
+IMPORTANT: Use the full range 0.3-1.0, don't just use 0.7-0.9. Be precise based on description clarity."""   
 
         # Call OpenAI API with enhanced prompt
         logger.info(f"🤖 Calling OpenAI API with description: '{description[:50]}{'...' if len(description) > 50 else ''}'")
@@ -354,11 +358,11 @@ The confidence should be between 0.0 and 1.0, where:
         
         try:
             # Fallback to basic categorization logic
-            fallback_category = fallback_categorization(description)
-            logger.info("Using fallback categorization due to OpenAI error: '%s' -> '%s'", description, fallback_category)
+            fallback_category, fallback_confidence = fallback_categorization(description)
+            logger.info("Using fallback categorization due to OpenAI error: '%s' -> '%s' (confidence: %.2f)", description, fallback_category, fallback_confidence)
             
-            # Record the fallback prediction with lower confidence
-            confidence = 0.6  # Lower confidence for fallback predictions
+            # Use the dynamic fallback confidence
+            confidence = fallback_confidence
             
             try:
                 metadata = model_manager.load_metadata()
@@ -384,72 +388,83 @@ The confidence should be between 0.0 and 1.0, where:
             # Last resort - return a safe default
             return "Other"
 
-def fallback_categorization(description: str) -> str:
+def fallback_categorization(description: str) -> tuple[str, float]:
     """
     Fallback categorization when OpenAI is unavailable.
     Uses simple keyword matching with comprehensive rules.
+    Returns tuple of (category, confidence) for better accuracy.
     """
     if not description:
-        return "Other"
+        return "Other", 0.3
         
     description_lower = description.lower()
     
-    # Food & Drink
-    food_keywords = ['food', 'restaurant', 'grocery', 'coffee', 'lunch', 'dinner', 'breakfast', 
-                     'cafe', 'pizza', 'burger', 'sushi', 'bar', 'pub', 'bakery', 'deli', 
-                     'market', 'supermarket', 'mcdonald', 'starbucks', 'subway', 'kfc']
-    if any(word in description_lower for word in food_keywords):
-        return "Food & Drink"
+    # Food & Drink with confidence based on keyword strength
+    food_keywords = {
+        'high': ['starbucks', 'mcdonald', 'kfc', 'subway', 'pizza', 'restaurant', 'cafe'],  # 0.8-0.9
+        'medium': ['coffee', 'food', 'grocery', 'lunch', 'dinner', 'breakfast', 'burger'],  # 0.7-0.8
+        'low': ['market', 'supermarket', 'bar', 'pub', 'bakery', 'deli']  # 0.6-0.7
+    }
     
-    # Transportation
-    transport_keywords = ['gas', 'fuel', 'uber', 'taxi', 'bus', 'train', 'parking', 'metro',
-                         'airport', 'flight', 'airline', 'car', 'vehicle', 'toll', 'petrol',
-                         'lyft', 'station', 'transport', 'ferry', 'bike']
-    if any(word in description_lower for word in transport_keywords):
-        return "Transportation"
+    for confidence_level, keywords in food_keywords.items():
+        if any(word in description_lower for word in keywords):
+            conf = 0.85 if confidence_level == 'high' else (0.75 if confidence_level == 'medium' else 0.65)
+            return "Food & Drink", conf
     
-    # Health & Fitness
-    health_keywords = ['gym', 'fitness', 'health', 'doctor', 'pharmacy', 'medical', 'hospital',
-                      'clinic', 'dentist', 'medicine', 'prescription', 'wellness', 'therapy',
-                      'yoga', 'massage', 'spa', 'sport']
-    if any(word in description_lower for word in health_keywords):
-        return "Health & Fitness"
+    # Transportation with confidence levels
+    transport_keywords = {
+        'high': ['uber', 'lyft', 'taxi', 'flight', 'airline'],  # 0.8-0.9
+        'medium': ['gas', 'fuel', 'parking', 'metro', 'train', 'bus'],  # 0.7-0.8
+        'low': ['transport', 'vehicle', 'car', 'station', 'toll']  # 0.6-0.7
+    }
     
-    # Shopping
-    shopping_keywords = ['amazon', 'shopping', 'store', 'purchase', 'buy', 'bought', 'shop',
-                        'retail', 'mall', 'outlet', 'ebay', 'walmart', 'target', 'costco',
-                        'clothes', 'clothing', 'fashion', 'electronics']
-    if any(word in description_lower for word in shopping_keywords):
-        return "Shopping"
+    for confidence_level, keywords in transport_keywords.items():
+        if any(word in description_lower for word in keywords):
+            conf = 0.85 if confidence_level == 'high' else (0.75 if confidence_level == 'medium' else 0.65)
+            return "Transportation", conf
     
-    # Bills & Utilities
-    utility_keywords = ['electric', 'water', 'gas bill', 'internet', 'phone', 'utility',
-                       'bill', 'payment', 'subscription', 'netflix', 'spotify', 'cable',
-                       'insurance', 'rent', 'mortgage', 'loan']
-    if any(word in description_lower for word in utility_keywords):
-        return "Bills & Utilities"
+    # Health & Fitness with confidence
+    health_keywords = {'high': ['gym', 'fitness'], 'medium': ['doctor', 'pharmacy', 'medical'], 'low': ['health', 'wellness']}
+    for level, keywords in health_keywords.items():
+        if any(word in description_lower for word in keywords):
+            conf = 0.85 if level == 'high' else (0.75 if level == 'medium' else 0.65)
+            return "Health & Fitness", conf
     
-    # Entertainment
-    entertainment_keywords = ['movie', 'cinema', 'theater', 'game', 'entertainment', 'concert',
-                             'music', 'streaming', 'netflix', 'youtube', 'book', 'magazine']
-    if any(word in description_lower for word in entertainment_keywords):
-        return "Entertainment"
+    # Shopping with confidence
+    shopping_keywords = {'high': ['amazon', 'walmart', 'target'], 'medium': ['shopping', 'store', 'purchase'], 'low': ['buy', 'bought']}
+    for level, keywords in shopping_keywords.items():
+        if any(word in description_lower for word in keywords):
+            conf = 0.85 if level == 'high' else (0.75 if level == 'medium' else 0.65)
+            return "Shopping", conf
     
-    # Income (transfers, salary, etc.)
-    income_keywords = ['salary', 'wage', 'payroll', 'transfer', 'deposit', 'refund', 'cashback',
-                      'dividend', 'interest', 'bonus', 'income', 'payment received']
-    if any(word in description_lower for word in income_keywords):
-        return "Income"
+    # Bills & Utilities with confidence
+    utility_keywords = {'high': ['netflix', 'spotify', 'rent', 'mortgage'], 'medium': ['bill', 'utility', 'subscription'], 'low': ['payment']}
+    for level, keywords in utility_keywords.items():
+        if any(word in description_lower for word in keywords):
+            conf = 0.85 if level == 'high' else (0.75 if level == 'medium' else 0.55)
+            return "Bills & Utilities", conf
     
-    # Bank Fees
-    fee_keywords = ['fee', 'charge', 'atm', 'overdraft', 'maintenance', 'service charge',
-                   'penalty', 'commission', 'bank fee']
-    if any(word in description_lower for word in fee_keywords):
-        return "Bank Fees"
+    # Entertainment with confidence
+    entertainment_keywords = {'high': ['netflix', 'spotify'], 'medium': ['movie', 'cinema', 'concert'], 'low': ['entertainment']}
+    for level, keywords in entertainment_keywords.items():
+        if any(word in description_lower for word in keywords):
+            conf = 0.85 if level == 'high' else (0.75 if level == 'medium' else 0.65)
+            return "Entertainment", conf
     
-    # Default fallback
+    # Income with confidence
+    income_keywords = {'high': ['salary', 'payroll'], 'medium': ['refund', 'cashback', 'dividend'], 'low': ['transfer', 'deposit']}
+    for level, keywords in income_keywords.items():
+        if any(word in description_lower for word in keywords):
+            conf = 0.85 if level == 'high' else (0.75 if level == 'medium' else 0.60)
+            return "Income", conf
+    
+    # Bank Fees with confidence
+    if any(word in description_lower for word in ['fee', 'charge', 'atm', 'overdraft']):
+        return "Bank Fees", 0.80
+    
+    # Default fallback with low confidence
     logger.info("No keyword match found for description: '%s', categorizing as 'Other'", description)
-    return "Other"
+    return "Other", 0.4
 
 def evaluate_model(model_data, X_test, y_test) -> Dict[str, Any]:
     """

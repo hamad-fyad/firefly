@@ -161,7 +161,19 @@ async def incoming_event(request: Request):
     try:
         ai_category = predict_category(tx_desc)
         categorization_time = time.time() - categorization_start
-        confidence = 0.85  # Default confidence for successful predictions
+        
+        # Get the confidence from the last recorded prediction (since predict_category records it internally)
+        try:
+            from app.model_metrics import get_predictions_data
+            recent_predictions = get_predictions_data()
+            # Find the most recent prediction for this description to get its confidence
+            confidence = 0.85  # Default fallback
+            for pred in recent_predictions:
+                if pred.get('description') == tx_desc:
+                    confidence = pred.get('confidence', 0.85)
+                    break
+        except Exception:
+            confidence = 0.85  # Fallback if we can't get the recorded confidence
         
         logger.info(f"✅ AI categorization completed in {categorization_time:.2f}s")
         logger.info(f"🎯 Result: '{tx_desc}' -> '{ai_category}' (confidence: {confidence})")
@@ -169,11 +181,16 @@ async def incoming_event(request: Request):
     except Exception as ai_error:
         categorization_time = time.time() - categorization_start
         logger.error(f"❌ AI categorization failed after {categorization_time:.2f}s: {str(ai_error)}")
-        ai_category = "Uncategorized"
-        confidence = 0.5
-        logger.warning(f"🔄 Using fallback category: '{ai_category}'")
         
-        # IMPORTANT: Record the fallback prediction in metrics since predict_category() failed
+        # Use the improved fallback categorization system
+        try:
+            from app.ai_model import fallback_categorization
+            ai_category, confidence = fallback_categorization(tx_desc)
+            logger.warning(f"🔄 Using improved fallback: '{tx_desc}' -> '{ai_category}' (confidence: {confidence})")
+        except Exception as fallback_error:
+            logger.error(f"❌ Even fallback categorization failed: {str(fallback_error)}")
+            ai_category = "Uncategorized" 
+            confidence = 0.3        # IMPORTANT: Record the fallback prediction in metrics since predict_category() failed
         try:
             from app.model_metrics import record_prediction
             from app import model_manager
@@ -376,9 +393,21 @@ async def test_categorize(request: Request):
         return JSONResponse(status_code=400, content={"error": "Description required"})
     
     try:
+        start_time = time.time()
         category = predict_category(description)
-        return {"description": description, "predicted_category": category, "source": "ai_service"}
+        duration = time.time() - start_time
+        
+        logger.info(f"🧪 TEST: Categorized '{description}' -> '{category}' in {duration:.2f}s")
+        
+        return {
+            "description": description, 
+            "predicted_category": category, 
+            "source": "ai_service",
+            "duration": duration,
+            "timestamp": time.time()
+        }
     except Exception as e:
+        logger.error(f"❌ TEST: Categorization failed: {str(e)}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
@@ -587,6 +616,7 @@ async def metrics_dashboard():
             </div>
             
             <button class="refresh-btn" onclick="refreshMetrics()">🔄 Refresh Data</button>
+            <button class="refresh-btn" onclick="forceRefresh()" style="margin-left: 10px;">⚡ Force Refresh</button>
             
             <div class="stats-grid" id="statsGrid">
                 <div class="loading">Loading metrics...</div>
@@ -616,8 +646,13 @@ async def metrics_dashboard():
             
             async function fetchMetrics() {
                 try {
-                    const response = await fetch('/api/metrics');
-                    return await response.json();
+                    // Add timestamp to prevent caching
+                    const timestamp = new Date().getTime();
+                    const response = await fetch(`/api/metrics?t=${timestamp}`);
+                    const data = await response.json();
+                    console.log(`📊 Fetched metrics at ${new Date().toLocaleTimeString()}:`, 
+                               `${data.predictions?.length || 0} predictions`);
+                    return data;
                 } catch (error) {
                     console.error('Error fetching metrics:', error);
                     return null;
@@ -733,9 +768,18 @@ async def metrics_dashboard():
             
             function updatePredictionsTable(predictions) {
                 const tableDiv = document.getElementById('predictionsTable');
-                const recent = predictions.slice(-10).reverse();
+                
+                // Sort by timestamp (most recent first) and take top 20
+                const sortedPredictions = predictions
+                    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+                    .slice(0, 20);
+                
+                console.log(`📝 Updating table with ${sortedPredictions.length} recent predictions`);
                 
                 tableDiv.innerHTML = `
+                    <div style="margin-bottom: 10px; color: #666; font-size: 0.9em;">
+                        📊 Showing ${sortedPredictions.length} most recent predictions (Last updated: ${new Date().toLocaleTimeString()})
+                    </div>
                     <table>
                         <thead>
                             <tr>
@@ -746,7 +790,7 @@ async def metrics_dashboard():
                             </tr>
                         </thead>
                         <tbody>
-                            ${recent.map(pred => `
+                            ${sortedPredictions.map(pred => `
                                 <tr>
                                     <td>${pred.description}</td>
                                     <td><strong>${pred.predicted_category}</strong></td>
@@ -774,11 +818,33 @@ async def metrics_dashboard():
                 }
             }
             
+            // Force refresh with cache busting and visual feedback
+            async function forceRefresh() {
+                console.log('🔄 Force refreshing metrics...');
+                const button = event.target;
+                const originalText = button.textContent;
+                button.textContent = '🔄 Refreshing...';
+                button.disabled = true;
+                
+                try {
+                    await refreshMetrics();
+                    console.log('✅ Force refresh completed');
+                } catch (error) {
+                    console.error('❌ Force refresh failed:', error);
+                } finally {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                }
+            }
+            
             // Load data on page load
             document.addEventListener('DOMContentLoaded', refreshMetrics);
             
-            // Auto-refresh every 30 seconds
-            setInterval(refreshMetrics, 30000);
+            // Auto-refresh every 10 seconds for better real-time updates
+            setInterval(refreshMetrics, 10000);
+            
+            // Also refresh when window gains focus
+            window.addEventListener('focus', refreshMetrics);
         </script>
     </body>
     </html>
@@ -809,6 +875,8 @@ async def get_real_time_accuracy():
 async def get_metrics_data():
     """API endpoint to get metrics data in JSON format."""
     try:
+        logger.info("📊 API: Fetching latest metrics data...")
+        
         summary = get_model_performance_summary()
         predictions = get_predictions_data()
         
@@ -816,13 +884,22 @@ async def get_metrics_data():
         from . import model_metrics
         accuracy_data = model_metrics.get_real_time_accuracy()
         
-        return {
+        # Add metadata for debugging
+        response_data = {
             "summary": summary,
             "predictions": predictions,
             "accuracy": accuracy_data,
-            "storage_type": summary.get("storage_type", "unknown")
+            "storage_type": summary.get("storage_type", "unknown"),
+            "timestamp": time.time(),
+            "predictions_count": len(predictions),
+            "latest_prediction": predictions[0] if predictions else None
         }
+        
+        logger.info(f"📊 API: Returning {len(predictions)} predictions, latest: {predictions[0]['timestamp'] if predictions else 'None'}")
+        
+        return response_data
     except Exception as e:
+        logger.error(f"❌ API: Failed to load metrics: {str(e)}")
         return JSONResponse(
             status_code=500,
             content={"error": f"Failed to load metrics: {str(e)}"}
@@ -902,6 +979,92 @@ async def test_ai_categorization(request: Request):
                 "message": "Test endpoint itself failed"
             }
         )
+
+@app.post("/test-confidence")
+async def test_confidence_system(request: Request):
+    """Test endpoint to show how confidence varies with different descriptions."""
+    try:
+        data = await request.json()
+        test_descriptions = data.get("descriptions", [
+            "Starbucks coffee purchase",
+            "Amazon shopping",
+            "Payment transaction", 
+            "Uber ride to airport",
+            "Gym membership fee",
+            "Random xyz transaction"
+        ])
+        
+        results = []
+        for desc in test_descriptions:
+            try:
+                category = predict_category(desc)
+                
+                # Get the recorded confidence
+                from app.model_metrics import get_predictions_data
+                recent_predictions = get_predictions_data()
+                confidence = 0.85  # default
+                for pred in recent_predictions:
+                    if pred.get('description') == desc:
+                        confidence = pred.get('confidence', 0.85)
+                        break
+                
+                results.append({
+                    "description": desc,
+                    "category": category,
+                    "confidence": confidence,
+                    "confidence_level": (
+                        "Very High" if confidence >= 0.9 else
+                        "High" if confidence >= 0.8 else
+                        "Medium" if confidence >= 0.7 else
+                        "Low" if confidence >= 0.6 else
+                        "Very Low"
+                    )
+                })
+            except Exception as e:
+                results.append({
+                    "description": desc,
+                    "error": str(e)
+                })
+        
+        return {
+            "message": "Confidence varies based on description clarity and AI analysis",
+            "results": results,
+            "explanation": {
+                "dynamic_factors": [
+                    "OpenAI confidence (0.3-1.0 based on description clarity)",
+                    "Historical accuracy (learned from past predictions)",
+                    "Keyword strength (for fallback categorization)",
+                    "Category match accuracy"
+                ]
+            }
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.get("/metrics-count")
+async def metrics_count():
+    """Quick endpoint to check current metrics count for debugging."""
+    try:
+        from app.model_metrics import get_predictions_data
+        predictions = get_predictions_data()
+        
+        latest_predictions = sorted(predictions, key=lambda x: x.get("timestamp", ""), reverse=True)[:5]
+        
+        return {
+            "total_predictions": len(predictions),
+            "latest_5": [
+                {
+                    "timestamp": pred.get("timestamp"),
+                    "description": pred.get("description", "")[:50] + "..." if len(pred.get("description", "")) > 50 else pred.get("description", ""),
+                    "category": pred.get("predicted_category"),
+                    "confidence": pred.get("confidence")
+                }
+                for pred in latest_predictions
+            ],
+            "current_time": time.time()
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/debug-env")
 async def debug_environment():
