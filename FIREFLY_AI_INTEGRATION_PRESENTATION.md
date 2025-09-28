@@ -253,8 +253,6 @@ spending_by_category = {
     "Bills & Utilities": "$567.89"
 }
 
-# Trend detection
-monthly_trends = analyze_spending_patterns(categories, timeframe="3months")
 ```
 
 **🔄 Feedback Integration**

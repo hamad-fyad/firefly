@@ -67,7 +67,7 @@ Examples:
 - "Netflix Monthly Subscription" → Entertainment (confidence: 0.90)
 - "British Gas Bill Payment" → Bills (confidence: 0.88)
 - "Amazon Purchase" → Shopping (confidence: 0.85)
-- "ATM Cash Withdrawal" → Other (confidence: 0.70)
+- "ATM Cash Withdrawal" → Bank Fees (confidence: 0.80)
 """
     return examples_text.strip()
 
@@ -205,18 +205,24 @@ def predict_category(description: str) -> str:
             
             return fallback_category
 
-        # Get available categories (you might want to make this configurable)
-        available_categories = [
+        # Suggested categories - AI can create new ones if needed
+        suggested_categories = [
             "Food & Drink", "Transportation", "Shopping", "Health & Fitness", 
             "Entertainment", "Bills & Utilities", "Income", "Investment", 
-            "Education", "Travel", "Insurance", "Charity", "Other",
-            "AI & Tech","Bank Fees", "Healthcare", "Housing", "Income", "Investment", "Education", "Travel", "Insurance", "Charity", "Other"
+            "Education", "Travel", "Insurance", "Charity", "Bank Fees", 
+            "Healthcare", "Housing", "AI & Tech", "Subscriptions"
         ]
 
-        # Enhanced prompt to get confidence scores
+        # Enhanced prompt that allows creating new categories
         enhanced_prompt = f"""You are an AI assistant that categorizes financial transactions. Based on the transaction description, choose the most appropriate category and provide a confidence score.
 
-Available Categories: {', '.join(available_categories)}
+Suggested Categories: {', '.join(suggested_categories)}
+
+You can use the suggested categories above OR create a new, more specific category if none fit well.
+New categories should be:
+- Clear and descriptive (e.g., "Pet Care", "Home Improvement", "Professional Services")
+- Consistent with financial categorization standards
+- More specific than "Other"
 
 Here are some examples:
 {get_few_shot_examples_text()}
@@ -226,35 +232,35 @@ Description: {description}
 
 Respond in this EXACT JSON format:
 {{
-    "category": "chosen_category_name",
+    "category": "chosen_or_new_category_name",
     "confidence": 0.95,
     "reasoning": "brief explanation why this category fits"
 }}
 
-Confidence Guidelines (be specific and varied):
-- 0.95-1.0: Perfect match with clear keywords (e.g., "Starbucks coffee" -> Food & Drink)
-- 0.85-0.94: Very confident with strong indicators (e.g., "gym membership" -> Health & Fitness)
-- 0.75-0.84: Confident with good context clues (e.g., "monthly subscription" -> Bills & Utilities)
-- 0.65-0.74: Moderate confidence, some ambiguity (e.g., "Amazon purchase" -> Shopping)
-- 0.50-0.64: Lower confidence, unclear category (e.g., "payment" -> could be many categories)
-- 0.30-0.49: Low confidence, very ambiguous (e.g., "transfer" -> unclear purpose)
+Confidence Guidelines:
+- 0.95-1.0: Perfect match with clear keywords
+- 0.85-0.94: Very confident with strong indicators
+- 0.75-0.84: Confident with good context clues
+- 0.65-0.74: Moderate confidence, some ambiguity
+- 0.50-0.64: Lower confidence, unclear category
+- 0.30-0.49: Low confidence, very ambiguous
 
-IMPORTANT: Use the full range 0.3-1.0, don't just use 0.7-0.9. Be precise based on description clarity."""   
+IMPORTANT: Avoid "Other" - create specific categories instead."""   
 
         # Call OpenAI API with enhanced prompt
         logger.info(f"🤖 Calling OpenAI API with description: '{description[:50]}{'...' if len(description) > 50 else ''}'")
-        logger.debug(f"📋 Available categories: {len(available_categories)} options")
+        logger.debug(f"📋 Suggested categories: {len(suggested_categories)} options")
         
         api_start_time = time.time()
         
         try:
             response = client.chat.completions.create(
-                model="gpt-3.5-turbo",  # You can use gpt-4 for better accuracy
+                model="gpt-4",  # Using GPT-4 for better accuracy
                 messages=[
-                    {"role": "system", "content": "You are a financial transaction categorization expert. Always respond with valid JSON containing category, confidence, and reasoning."},
+                    {"role": "system", "content": "You are a financial transaction categorization expert. Create specific, meaningful categories. Avoid generic 'Other' categories. Always respond with valid JSON containing category, confidence, and reasoning."},
                     {"role": "user", "content": enhanced_prompt}
                 ],
-                max_tokens=150,
+                max_tokens=200,
                 temperature=0.1,  # Low temperature for consistent results
                 timeout=30
             )
@@ -316,20 +322,17 @@ IMPORTANT: Use the full range 0.3-1.0, don't just use 0.7-0.9. Be precise based 
             confidence = 0.7  # Default confidence if parsing fails
             reasoning = "Parsed from simple text response"
         
-        # Validate that the response is one of our available categories
-        if predicted_category not in available_categories:
-            # Try to find the closest match
-            predicted_category_lower = predicted_category.lower()
-            original_confidence = confidence
-            for cat in available_categories:
-                if cat.lower() in predicted_category_lower or predicted_category_lower in cat.lower():
-                    predicted_category = cat
-                    break
-            else:
-                # If no match found, default to a reasonable category and reduce confidence
-                predicted_category = "Other"
-                confidence = max(0.3, confidence * 0.5)  # Reduce confidence due to category mismatch
-                logger.warning(f"Category not in available list, defaulting to 'Other' and reducing confidence from {original_confidence:.2f} to {confidence:.2f}")
+        # Clean up the category name (capitalize properly)
+        predicted_category = predicted_category.strip()
+        if predicted_category and predicted_category not in suggested_categories:
+            # AI created a new category - log it for visibility
+            logger.info(f"🆕 AI created new category: '{predicted_category}' for description: '{description[:50]}'")
+        
+        # Validate category name is reasonable (not empty, not just "Other")
+        if not predicted_category or predicted_category.lower() in ['other', 'unknown', 'misc']:
+            predicted_category = "Miscellaneous"
+            confidence = max(0.4, confidence * 0.7)  # Slight confidence reduction
+            logger.info(f"Improved generic category to 'Miscellaneous'")
 
         # Enhance confidence with historical data
         dynamic_confidence = model_metrics.get_dynamic_confidence(description, predicted_category)
@@ -386,7 +389,7 @@ IMPORTANT: Use the full range 0.3-1.0, don't just use 0.7-0.9. Be precise based 
         except Exception as fallback_error:
             logger.error("CRITICAL: Even fallback categorization failed: %s", str(fallback_error))
             # Last resort - return a safe default
-            return "Other"
+            return "Miscellaneous"
 
 def fallback_categorization(description: str) -> tuple[str, float]:
     """
@@ -395,7 +398,7 @@ def fallback_categorization(description: str) -> tuple[str, float]:
     Returns tuple of (category, confidence) for better accuracy.
     """
     if not description:
-        return "Other", 0.3
+        return "Miscellaneous", 0.3
         
     description_lower = description.lower()
     
@@ -463,8 +466,8 @@ def fallback_categorization(description: str) -> tuple[str, float]:
         return "Bank Fees", 0.80
     
     # Default fallback with low confidence
-    logger.info("No keyword match found for description: '%s', categorizing as 'Other'", description)
-    return "Other", 0.4
+    logger.info("No keyword match found for description: '%s', categorizing as 'Miscellaneous'", description)
+    return "Miscellaneous", 0.4
 
 def evaluate_model(model_data, X_test, y_test) -> Dict[str, Any]:
     """
@@ -502,7 +505,7 @@ def retrain_model() -> None:
         # Create model metadata
         model_metadata = {
             "model_type": "openai",
-            "version": "gpt-3.5-turbo",
+            "version": "gpt-4",
             "sample_count": len(feedback),
             "categories": list(set(item["cat"] for item in feedback)),
             "last_updated": time.time(),
