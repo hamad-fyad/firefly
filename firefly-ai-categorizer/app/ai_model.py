@@ -184,7 +184,7 @@ def predict_category(description: str) -> str:
         # Get OpenAI client
         client = get_openai_client()
         if not client:
-            logger.warning("OpenAI client not available, using fallback categorization")
+            logger.warning("🚫 OPENAI UNAVAILABLE: Using fallback for '%s'", description[:50])
             fallback_category, fallback_confidence = fallback_categorization(description)
             
             # Record the fallback prediction
@@ -350,7 +350,7 @@ IMPORTANT: Use the full range 0.3-1.0, don't just use 0.7-0.9. Be precise based 
             confidence=final_confidence
         )
 
-        logger.info("Successfully predicted category '%s' with OpenAI", predicted_category)
+        logger.info("🎯 CHATGPT SUCCESS: '%s' -> '%s' (confidence: %.2f)", description[:50], predicted_category, final_confidence)
         return predicted_category
 
     except Exception as e:
@@ -359,7 +359,7 @@ IMPORTANT: Use the full range 0.3-1.0, don't just use 0.7-0.9. Be precise based 
         try:
             # Fallback to basic categorization logic
             fallback_category, fallback_confidence = fallback_categorization(description)
-            logger.info("Using fallback categorization due to OpenAI error: '%s' -> '%s' (confidence: %.2f)", description, fallback_category, fallback_confidence)
+            logger.info("🔄 FALLBACK USED: '%s' -> '%s' (confidence: %.2f) - OpenAI failed", description[:50], fallback_category, fallback_confidence)
             
             # Use the dynamic fallback confidence
             confidence = fallback_confidence
