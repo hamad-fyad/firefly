@@ -85,7 +85,7 @@ def test_create_withdrawal_transaction(test_accounts):
     
     response = requests.post(config.BASE_URL + '/transactions', headers=config.HEADERS, json=transaction_data)
     assert response.status_code == 200, f"Failed to create transaction: {response.text}"
-    
+    # here i need to add another call for the transaction details to check the details for ai categorization
     transaction = response.json()["data"]["attributes"]["transactions"][0]
     assert transaction["type"] == "withdrawal"
     assert float(transaction["amount"]) == 25.50
