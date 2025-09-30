@@ -1,3 +1,10 @@
+"""
+Environment and Infrastructure Tests - System Setup and Configuration Validation
+
+Tests environment detection, service availability, and infrastructure readiness.
+Validates that all required services are properly configured and accessible
+across different deployment environments (local, CI/CD, production).
+"""
 import pytest
 import requests
 import os
