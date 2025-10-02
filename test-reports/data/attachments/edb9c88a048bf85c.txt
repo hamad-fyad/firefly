@@ -1,0 +1,3 @@
+✅ Firefly connectivity test passed
+   URL: http://52.212.42.101:8080/login
+   Page size: 6020 chars

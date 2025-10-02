@@ -1,0 +1,48 @@
+"DESCRIPTION","DURATION IN MS","NAME","PARENT SUITE","START TIME","STATUS","STOP TIME","SUB SUITE","SUITE","TEST CLASS","TEST METHOD"
+"Test webhook rate limiting logic.","1","test_webhook_rate_limiting","tests","Thu Oct 02 09:42:56 UTC 2025","passed","Thu Oct 02 09:42:56 UTC 2025","","test_webhook_unit","",""
+"Test webhook retry logic for failed requests.","1","test_webhook_retry_logic","tests","Thu Oct 02 09:42:56 UTC 2025","passed","Thu Oct 02 09:42:56 UTC 2025","","test_webhook_unit","",""
+"Test AI error handling scenarios.","0","test_ai_error_handling","tests","Thu Oct 02 09:42:56 UTC 2025","passed","Thu Oct 02 09:42:56 UTC 2025","","test_ai_unit","",""
+"
+    Test System Information and Health Check Workflow
+    
+    Purpose:
+        Validates that the Firefly III instance is healthy and returns proper system information.
+        This is often the first test to run to ensure basic connectivity.
+    
+    What it tests:
+        - API endpoint accessibility (/about)
+        - Response structure contains required system information
+        - Version information format validation
+        - Basic authentication works
+    
+    How it works:
+        1. Makes GET request to /about endpoint with authentication headers
+        2. Validates HTTP 200 response (service is running)
+        3. Checks response contains version, api_version, and php_version fields
+        4. Validates version format follows semantic versioning (contains dots)
+    
+    Business Value:
+        - Ensures the system is operational before running financial tests
+        - Validates API versioning for compatibility checks
+        - Confirms authentication is working properly
+    ","208","test_firefly_about_endpoint","tests","Thu Oct 02 09:43:56 UTC 2025","passed","Thu Oct 02 09:43:56 UTC 2025","","test_firefly_advanced","",""
+"Test withdrawal creation - expense tracking and money outflow recording.","472","test_create_withdrawal_transaction","tests","Thu Oct 02 09:43:54 UTC 2025","passed","Thu Oct 02 09:43:54 UTC 2025","","test_firefly_transactions","",""
+"Test AI confidence threshold handling without external dependencies.","0","test_ai_confidence_threshold_logic","tests","Thu Oct 02 09:42:56 UTC 2025","passed","Thu Oct 02 09:42:56 UTC 2025","","test_ai_unit","",""
+"Test webhook payload sanitization and security.","0","test_webhook_payload_sanitization","tests","Thu Oct 02 09:42:56 UTC 2025","passed","Thu Oct 02 09:42:56 UTC 2025","","test_webhook_unit","",""
+"Test webhook data transformation logic.","0","test_webhook_data_transformation","tests","Thu Oct 02 09:42:56 UTC 2025","passed","Thu Oct 02 09:42:56 UTC 2025","","test_webhook_unit","",""
+"Test AI category validation logic.","1","test_ai_category_validation","tests","Thu Oct 02 09:42:56 UTC 2025","passed","Thu Oct 02 09:42:56 UTC 2025","","test_ai_unit","",""
+"Test webhook payload validation logic.","0","test_webhook_payload_validation","tests","Thu Oct 02 09:42:56 UTC 2025","passed","Thu Oct 02 09:42:56 UTC 2025","","test_webhook_unit","",""
+"Test webhook error handling scenarios.","0","test_webhook_error_handling","tests","Thu Oct 02 09:42:56 UTC 2025","passed","Thu Oct 02 09:42:56 UTC 2025","","test_webhook_unit","",""
+"Test account creation - validates new financial account setup.","280","test_post_account","tests","Thu Oct 02 09:43:56 UTC 2025","passed","Thu Oct 02 09:43:56 UTC 2025","","test_account","",""
+"Test basic Chrome WebDriver operations.","531","test_chrome_basic_functionality","tests-UI","Thu Oct 02 09:44:01 UTC 2025","passed","Thu Oct 02 09:44:02 UTC 2025","ChromeSmokeTest","test_chrome_smoke","",""
+"","2690","test_logout","tests-UI","Thu Oct 02 09:44:23 UTC 2025","passed","Thu Oct 02 09:44:26 UTC 2025","Fireflylogout","test_logout","",""
+"Test connectivity to Firefly III instance.","1345","test_firefly_connectivity","tests-UI","Thu Oct 02 09:44:02 UTC 2025","passed","Thu Oct 02 09:44:03 UTC 2025","ChromeSmokeTest","test_chrome_smoke","",""
+"Test AI metrics data structure without database dependencies.","0","test_ai_metrics_structure","tests","Thu Oct 02 09:42:56 UTC 2025","passed","Thu Oct 02 09:42:56 UTC 2025","","test_ai_unit","",""
+"Test webhook signature validation logic.","0","test_webhook_signature_validation","tests","Thu Oct 02 09:42:56 UTC 2025","passed","Thu Oct 02 09:42:56 UTC 2025","","test_webhook_unit","",""
+"Test AI service integration with mocked HTTP calls.","2","test_ai_service_integration_mock","tests","Thu Oct 02 09:42:56 UTC 2025","passed","Thu Oct 02 09:42:56 UTC 2025","","test_ai_unit","",""
+"Test fallback categorization when AI is unavailable.","0","test_ai_fallback_categorization","tests","Thu Oct 02 09:42:56 UTC 2025","passed","Thu Oct 02 09:42:56 UTC 2025","","test_ai_unit","",""
+"Test AI categorization logic with mocked OpenAI responses.","0","test_ai_categorization_logic","tests","Thu Oct 02 09:42:56 UTC 2025","passed","Thu Oct 02 09:42:56 UTC 2025","","test_ai_unit","",""
+"Test deposit creation - income recording and money inflow tracking.","451","test_create_deposit_transaction","tests","Thu Oct 02 09:43:54 UTC 2025","passed","Thu Oct 02 09:43:55 UTC 2025","","test_firefly_transactions","",""
+"","19537","test_create_budget","tests-UI","Thu Oct 02 09:44:03 UTC 2025","passed","Thu Oct 02 09:44:23 UTC 2025","FireflyBudgetTest","test_flow_creating_budget_and_deleting_account","",""
+"Test webhook queue processing logic.","0","test_webhook_queue_processing","tests","Thu Oct 02 09:42:56 UTC 2025","passed","Thu Oct 02 09:42:56 UTC 2025","","test_webhook_unit","",""
+"Test webhook AI integration with mocked calls.","1","test_webhook_ai_integration_mock","tests","Thu Oct 02 09:42:56 UTC 2025","passed","Thu Oct 02 09:42:56 UTC 2025","","test_webhook_unit","",""

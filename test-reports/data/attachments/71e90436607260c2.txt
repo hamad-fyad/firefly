@@ -1,0 +1,6 @@
+✅ Fallback: Starbucks downtown location -> Food & Drinks
+✅ Fallback: Shell gas station pump 3 -> Transportation
+✅ Fallback: McDonald's drive thru -> Food & Drinks
+✅ Fallback: Walmart grocery shopping -> Groceries
+✅ Fallback: Amazon online purchase -> Shopping
+✅ Fallback: Unknown merchant 12345 -> Uncategorized

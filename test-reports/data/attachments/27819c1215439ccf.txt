@@ -1,0 +1,5 @@
+✅ Chrome smoke test passed
+   Title: Chrome Smoke Test
+   Window: 1920x1080
+   Elements found: h1, #test-element, .test-class
+   JavaScript execution: ✅

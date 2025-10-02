@@ -1,0 +1,4 @@
+✅ Error handling: OpenAI API Timeout -> Fallback
+✅ Error handling: OpenAI Rate Limit -> Fallback
+✅ Error handling: Invalid API Key -> Fallback
+✅ Error handling: Network Error -> Fallback

@@ -1,0 +1,4 @@
+✅ Error handling: Invalid JSON payload -> 400
+✅ Error handling: Missing required fields -> 400
+✅ Error handling: Invalid transaction type -> 400
+✅ Error handling: AI service unavailable -> 200

@@ -1,0 +1,2 @@
+No intro skip button visible at first.
+Account deleted successfully
