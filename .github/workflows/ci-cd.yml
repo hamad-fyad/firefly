@@ -159,7 +159,7 @@ jobs:
   deploy-to-ec2:
     runs-on: ubuntu-latest
     needs: build-and-push
-    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/intgrate_with_chatgpt' || github.event.inputs.force_deploy == 'true') && needs.build-and-push.result == 'success'
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/intgrate_with_chatgpt' || github.ref == 'refs/heads/adding-new-feature-for-ai' || github.event.inputs.force_deploy == 'true') && needs.build-and-push.result == 'success'
     
     steps:
       - name: 🐛 Debug Deploy Conditions
