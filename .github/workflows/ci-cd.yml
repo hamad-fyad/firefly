@@ -243,9 +243,8 @@ jobs:
           APP_URL=${{ env.FIREFLY_BASE_URL }}
           FIREFLY_URL=${{ env.FIREFLY_BASE_URL }}
           
-          # API Tokens (will be generated automatically)
-          FIREFLY_TOKEN=\${FIREFLY_TOKEN}
-          FIREFLY_TOKEN2=\${FIREFLY_TOKEN2}
+          # API Tokens (will be generated automatically by configure script)
+          # Note: Don't override the token secrets set above
           API_TESTING_TOKEN=\${API_TESTING_TOKEN}
           API_TESTING_TOKEN2=\${API_TESTING_TOKEN2}
           
@@ -302,6 +301,21 @@ jobs:
             export DOCKER_USERNAME="${{ env.DOCKER_USERNAME }}"
             export AI_SERVICE_TAG="${{ needs.build-and-push.outputs.version }}"
             export WEBHOOK_SERVICE_TAG="${{ needs.build-and-push.outputs.version }}"
+            export LOCAL_TOKEN="${{ secrets.LOCAL_TOKEN }}"
+            export FIREFLY_TOKEN_ec2="${{ secrets.FIREFLY_TOKEN_EC2 }}"
+            export FIREFLY_TOKEN="${{ secrets.FIREFLY_TOKEN }}"
+            export OPENAI_API_KEY="${{ env.OPENAI_API_KEY }}"
+            export ENVIRONMENT="ci"
+            
+            echo "🔍 Environment variables for services:"
+            echo "DOCKER_USERNAME: $DOCKER_USERNAME"
+            echo "AI_SERVICE_TAG: $AI_SERVICE_TAG"
+            echo "WEBHOOK_SERVICE_TAG: $WEBHOOK_SERVICE_TAG"
+            echo "LOCAL_TOKEN: $(if [ -n "$LOCAL_TOKEN" ]; then echo "SET (${#LOCAL_TOKEN} chars)"; else echo "NOT SET"; fi)"
+            echo "FIREFLY_TOKEN_ec2: $(if [ -n "$FIREFLY_TOKEN_ec2" ]; then echo "SET (${#FIREFLY_TOKEN_ec2} chars)"; else echo "NOT SET"; fi)"
+            echo "FIREFLY_TOKEN: $(if [ -n "$FIREFLY_TOKEN" ]; then echo "SET (${#FIREFLY_TOKEN} chars)"; else echo "NOT SET"; fi)"
+            echo "OPENAI_API_KEY: $(if [ -n "$OPENAI_API_KEY" ]; then echo "SET (${#OPENAI_API_KEY} chars)"; else echo "NOT SET"; fi)"
+            echo "ENVIRONMENT: $ENVIRONMENT"
             
             echo "� Debugging file presence and permissions..."
             ls -la *.sh || echo "No .sh files found"

@@ -123,6 +123,7 @@ services:
       FIREFLY_API_URL: http://app:8080
       LOCAL_TOKEN: ${LOCAL_TOKEN}
       FIREFLY_TOKEN_ec2: ${FIREFLY_TOKEN_ec2}
+      FIREFLY_TOKEN: ${FIREFLY_TOKEN}
       APP_ENV: ${APP_ENV}
       ENVIRONMENT: ${ENVIRONMENT:-local}
       AI_SERVICE_URL: http://ai-service:8001
