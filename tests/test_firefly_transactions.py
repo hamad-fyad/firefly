@@ -1,3 +1,10 @@
+"""
+Transaction Management Tests - Core Financial Operations
+
+Tests transaction CRUD operations, transfers, and financial workflows.
+Transactions are the heart of financial tracking - recording money movement,
+categorization, and financial relationships between accounts.
+"""
 import requests
 import pytest
 import config
@@ -56,7 +63,7 @@ def test_accounts():
 @pytest.mark.business_workflow
 @pytest.mark.github_actions
 def test_create_withdrawal_transaction(test_accounts):
-    """Test creating a withdrawal transaction - business workflow for expense tracking."""
+    """Test withdrawal creation - expense tracking and money outflow recording."""
     transaction_data = {
         "error_if_duplicate_hash": False,
         "apply_rules": True,
@@ -78,7 +85,7 @@ def test_create_withdrawal_transaction(test_accounts):
     
     response = requests.post(config.BASE_URL + '/transactions', headers=config.HEADERS, json=transaction_data)
     assert response.status_code == 200, f"Failed to create transaction: {response.text}"
-    
+    # here i need to add another call for the transaction details to check the details for ai categorization
     transaction = response.json()["data"]["attributes"]["transactions"][0]
     assert transaction["type"] == "withdrawal"
     assert float(transaction["amount"]) == 25.50
@@ -92,7 +99,7 @@ def test_create_withdrawal_transaction(test_accounts):
 @pytest.mark.business_workflow
 @pytest.mark.github_actions
 def test_create_deposit_transaction(test_accounts):
-    """Test creating a deposit transaction - business workflow for income tracking."""
+    """Test deposit creation - income recording and money inflow tracking."""
     transaction_data = {
         "error_if_duplicate_hash": False,
         "apply_rules": True,
@@ -119,7 +126,7 @@ def test_create_deposit_transaction(test_accounts):
     assert transaction["category_name"] == "Salary"
 
 def test_create_transfer_transaction(test_accounts):
-    """Test creating a transfer transaction - business workflow for moving money between accounts."""
+    """Test transfer creation - money movement between user's accounts."""
     # Create another asset account for transfer
     dest_account_payload = {
         "name": generate_unique_account_name() + "_savings",
