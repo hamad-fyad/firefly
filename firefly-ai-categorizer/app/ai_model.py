@@ -319,7 +319,9 @@ IMPORTANT: Avoid "Other" - create specific categories instead."""
             # Fallback to simple text parsing
             response_text = response.choices[0].message.content.strip()
             predicted_category = response_text.split('\n')[0] if '\n' in response_text else response_text
-            confidence = 0.7  # Default confidence if parsing fails
+            
+            # Calculate confidence based on description clarity instead of defaulting to 0.7
+            confidence = _calculate_description_confidence(description, predicted_category)
             reasoning = "Parsed from simple text response"
         
         # Clean up the category name (capitalize properly)
@@ -547,3 +549,52 @@ def retrain_model() -> None:
     except Exception as e:
         logger.error("Failed to update model: %s", str(e))
         raise ModelError(f"Model update failed: {str(e)}")
+
+def _calculate_description_confidence(description: str, predicted_category: str) -> float:
+    """Calculate confidence based on description clarity and keyword strength."""
+    if not description:
+        return 0.3
+    
+    description_lower = description.lower()
+    
+    # High confidence keywords by category
+    strong_keywords = {
+        "Food & Drink": ["starbucks", "mcdonald", "restaurant", "cafe", "pizza", "grocery", "tesco", "sainsbury"],
+        "Transportation": ["uber", "lyft", "taxi", "gas", "fuel", "parking", "airline", "flight", "train", "bus"],
+        "Shopping": ["amazon", "walmart", "target", "ebay", "store", "shopping", "purchase"],
+        "Health & Fitness": ["gym", "fitness", "doctor", "pharmacy", "medical", "hospital", "dentist"],
+        "Entertainment": ["netflix", "spotify", "movie", "cinema", "concert", "theater", "gaming"],
+        "Bills & Utilities": ["electric", "water", "gas", "internet", "phone", "utility", "bill"],
+        "Subscriptions": ["netflix", "spotify", "subscription", "monthly", "premium", "pro"],
+        "Bank Fees": ["fee", "charge", "atm", "overdraft", "maintenance", "penalty"],
+        "Income": ["salary", "payroll", "wage", "refund", "cashback", "dividend", "bonus"]
+    }
+    
+    # Check for strong keyword matches
+    category_keywords = strong_keywords.get(predicted_category, [])
+    for keyword in category_keywords:
+        if keyword in description_lower:
+            return min(0.95, 0.88 + len(keyword) * 0.01)  # 0.88-0.95 based on keyword strength
+    
+    # Analyze description characteristics
+    word_count = len(description.split())
+    description_length = len(description.strip())
+    
+    # Very specific/detailed descriptions get higher confidence
+    if word_count >= 4 and description_length >= 25:
+        return 0.82  # Good detail level
+    elif word_count >= 3 and description_length >= 15:
+        return 0.75  # Moderate detail
+    elif word_count >= 2 and description_length >= 10:
+        return 0.68  # Basic detail
+    elif description_length >= 5:
+        return 0.55  # Minimal info
+    else:
+        return 0.40  # Very limited info
+    
+    # Check for generic/vague terms that reduce confidence
+    vague_terms = ["payment", "transaction", "transfer", "charge", "unknown", "misc"]
+    if any(term in description_lower for term in vague_terms):
+        return max(0.35, 0.60)  # Reduce confidence for vague descriptions
+    
+    return 0.65  # Default moderate confidence

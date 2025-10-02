@@ -438,61 +438,95 @@ def record_accuracy_feedback(prediction_id: int, predicted_category: str, actual
     return False
 
 def get_dynamic_confidence(description: str, predicted_category: str) -> float:
-    """Calculate dynamic confidence based on historical accuracy for similar predictions."""
+    """Calculate dynamic confidence based on historical accuracy and description analysis."""
     try:
-        if not DATABASE_AVAILABLE:
-            return 0.7  # Default confidence
+        # Try database first
+        if DATABASE_AVAILABLE:
+            session = get_database_session()
+            if session:
+                # Get historical accuracy for this category
+                category_feedback = session.query(AccuracyFeedback).filter_by(
+                    predicted_category=predicted_category
+                ).all()
+                
+                if len(category_feedback) >= 5:  # Enough data for analysis
+                    correct_predictions = sum(1 for f in category_feedback if f.is_correct == 1)
+                    accuracy_rate = correct_predictions / len(category_feedback)
+                    
+                    # Look for similar descriptions
+                    similar_feedback = []
+                    description_words = set(description.lower().split())
+                    
+                    for feedback in category_feedback:
+                        feedback_words = set(feedback.description.lower().split())
+                        similarity = len(description_words & feedback_words) / len(description_words | feedback_words)
+                        if similarity > 0.3:
+                            similar_feedback.append(feedback)
+                    
+                    session.close()
+                    
+                    if similar_feedback:
+                        similar_correct = sum(1 for f in similar_feedback if f.is_correct == 1)
+                        similar_accuracy = similar_correct / len(similar_feedback)
+                        final_confidence = 0.4 * accuracy_rate + 0.6 * similar_accuracy
+                    else:
+                        final_confidence = accuracy_rate
+                    
+                    final_confidence = max(0.3, min(0.95, final_confidence))
+                    logger.info(f"Dynamic confidence for '{predicted_category}': {final_confidence:.2f} (DB: {len(category_feedback)} predictions)")
+                    return final_confidence
+                
+                session.close()
         
-        session = get_database_session()
-        if not session:
-            return 0.7
+        # Fallback to file-based analysis
+        data = load_metrics_data()
+        predictions = data.get("predictions", [])
         
-        # Get historical accuracy for this category
-        category_feedback = session.query(AccuracyFeedback).filter_by(
-            predicted_category=predicted_category
-        ).all()
+        if not predictions:
+            # No historical data - base confidence on description clarity
+            return _calculate_base_confidence(description, predicted_category)
         
-        if len(category_feedback) < 5:  # Not enough data
-            session.close()
-            return 0.7
+        # Analyze historical data from file
+        category_predictions = [p for p in predictions if p.get("predicted_category") == predicted_category]
         
-        # Calculate accuracy rate for this category
-        correct_predictions = sum(1 for f in category_feedback if f.is_correct == 1)
-        accuracy_rate = correct_predictions / len(category_feedback)
+        if len(category_predictions) < 3:
+            # Not enough category data - use description analysis
+            return _calculate_base_confidence(description, predicted_category)
         
-        # Look for similar descriptions (simple keyword matching)
-        similar_feedback = []
+        # Calculate historical confidence for this category
+        confidences = [p.get("confidence", 0.7) for p in category_predictions]
+        avg_confidence = sum(confidences) / len(confidences)
+        
+        # Look for similar descriptions in historical data
         description_words = set(description.lower().split())
+        similar_predictions = []
         
-        for feedback in category_feedback:
-            feedback_words = set(feedback.description.lower().split())
-            similarity = len(description_words & feedback_words) / len(description_words | feedback_words)
-            if similarity > 0.3:  # 30% word overlap
-                similar_feedback.append(feedback)
+        for pred in category_predictions:
+            pred_desc = pred.get("description", "")
+            pred_words = set(pred_desc.lower().split())
+            if pred_words:
+                similarity = len(description_words & pred_words) / len(description_words | pred_words)
+                if similarity > 0.4:  # 40% similarity threshold
+                    similar_predictions.append(pred)
         
-        session.close()
-        
-        # If we have similar descriptions, use their accuracy
-        if similar_feedback:
-            similar_correct = sum(1 for f in similar_feedback if f.is_correct == 1)
-            similar_accuracy = similar_correct / len(similar_feedback)
-            # Weight between general category accuracy and similar description accuracy
-            final_confidence = 0.4 * accuracy_rate + 0.6 * similar_accuracy
+        if similar_predictions:
+            # Use average confidence from similar predictions
+            similar_confidences = [p.get("confidence", 0.7) for p in similar_predictions]
+            similar_avg = sum(similar_confidences) / len(similar_confidences)
+            # Weight between category average and similar predictions
+            final_confidence = 0.3 * avg_confidence + 0.7 * similar_avg
+            logger.info(f"Dynamic confidence for '{predicted_category}': {final_confidence:.2f} (File: {len(similar_predictions)} similar)")
         else:
-            final_confidence = accuracy_rate
+            # Use category average with base confidence adjustment
+            base_conf = _calculate_base_confidence(description, predicted_category)
+            final_confidence = 0.6 * avg_confidence + 0.4 * base_conf
+            logger.info(f"Dynamic confidence for '{predicted_category}': {final_confidence:.2f} (File: category avg)")
         
-        # Ensure confidence is in reasonable range
-        final_confidence = max(0.3, min(0.95, final_confidence))
-        
-        logger.info(f"Dynamic confidence for '{predicted_category}': {final_confidence:.2f} (based on {len(category_feedback)} historical predictions)")
-        return final_confidence
+        return max(0.3, min(0.95, final_confidence))
         
     except Exception as e:
-        logger.error(f"Failed to calculate dynamic confidence: {str(e)}")
-        # If it's a table not found error, log it but continue
-        if "does not exist" in str(e) or "relation" in str(e):
-            logger.warning("Database tables not initialized yet, using default confidence")
-        return 0.7  # Default fallback
+        logger.error(f"Dynamic confidence calculation failed: {str(e)}")
+        return _calculate_base_confidence(description, predicted_category)  # Smart fallback
 
 def get_real_time_accuracy() -> Dict[str, float]:
     """Get real-time accuracy metrics based on user feedback."""
@@ -553,3 +587,51 @@ def get_real_time_accuracy() -> Dict[str, float]:
         if "does not exist" in str(e) or "relation" in str(e):
             logger.warning("Database tables not initialized yet, using default accuracy")
         return {"overall_accuracy": 0.75, "sample_size": 0}
+
+def _calculate_base_confidence(description: str, predicted_category: str) -> float:
+    """Calculate base confidence based on description clarity and keyword strength."""
+    if not description:
+        return 0.3
+    
+    description_lower = description.lower()
+    
+    # High confidence keywords by category
+    high_confidence_keywords = {
+        "Food & Drink": ["starbucks", "mcdonald", "restaurant", "cafe", "pizza", "grocery", "food"],
+        "Transportation": ["uber", "lyft", "taxi", "gas", "fuel", "parking", "airline", "flight"],
+        "Shopping": ["amazon", "walmart", "target", "store", "shopping", "purchase"],
+        "Health & Fitness": ["gym", "fitness", "doctor", "pharmacy", "medical", "hospital"],
+        "Entertainment": ["netflix", "spotify", "movie", "cinema", "concert", "theater"],
+        "Bills & Utilities": ["electric", "water", "gas", "internet", "phone", "utility", "bill"],
+        "Subscriptions": ["netflix", "spotify", "subscription", "monthly", "annual"],
+        "Bank Fees": ["fee", "charge", "atm", "overdraft", "maintenance"],
+        "Income": ["salary", "payroll", "wage", "refund", "cashback", "dividend"]
+    }
+    
+    # Check for exact keyword matches
+    category_keywords = high_confidence_keywords.get(predicted_category, [])
+    for keyword in category_keywords:
+        if keyword in description_lower:
+            # High confidence for exact keyword match
+            return 0.90 + min(0.05, len(keyword) * 0.01)  # 0.90-0.95 based on keyword length
+    
+    # Check for partial matches and common patterns
+    description_length = len(description.strip())
+    word_count = len(description.split())
+    
+    # Base confidence on description quality
+    if description_length < 5:
+        return 0.35  # Very short description
+    elif description_length < 15:
+        return 0.50  # Short but might have some info
+    elif word_count >= 3 and description_length >= 20:
+        return 0.75  # Good descriptive length
+    else:
+        return 0.60  # Medium length
+    
+    # Additional checks for generic terms that reduce confidence
+    generic_terms = ["payment", "transaction", "transfer", "charge", "debit", "credit"]
+    if any(term in description_lower for term in generic_terms) and word_count <= 2:
+        return 0.40  # Generic single-word descriptions
+    
+    return 0.65  # Default reasonable confidence

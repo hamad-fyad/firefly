@@ -59,14 +59,22 @@ services:
     container_name: firefly_iii_ai_service
     restart: unless-stopped
     environment:
-      FIREFLY_TOKEN: ${FIREFLY_TOKEN}
+      LOCAL_TOKEN: ${LOCAL_TOKEN}
+      FIREFLY_TOKEN_ec2: ${FIREFLY_TOKEN_ec2}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      FIREFLY_API_URL: http://app:8080
       DATABASE_URL: postgresql://ai_user:ai_password@ai-db:5432/ai_metrics
+      # Firefly III Database credentials for real transaction data analysis
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: firefly
+      DB_USERNAME: admin
+      DB_PASSWORD: admin
     depends_on:
       ai-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8001/health').raise_for_status()"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -75,9 +83,7 @@ services:
       - ai_service_data:/app/data
       - ai_service_logs:/app/logs
     ports:
-      - "8082:8000"  # Expose AI service for metrics dashboard
-    expose:
-      - "8000"
+      - "8001:8001"  # AI service runs on port 8001
     networks:
       - firefly_iii
 
@@ -108,19 +114,22 @@ services:
     container_name: firefly_iii_webhook_service
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8001/health')"]
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health').raise_for_status()"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
     environment:
       FIREFLY_API_URL: http://app:8080
-      FIREFLY_TOKEN: ${FIREFLY_TOKEN}
-      AI_SERVICE_URL: http://ai-service:8000
+      LOCAL_TOKEN: ${LOCAL_TOKEN}
+      FIREFLY_TOKEN_ec2: ${FIREFLY_TOKEN_ec2}
+      APP_ENV: ${APP_ENV}
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      AI_SERVICE_URL: http://ai-service:8001
     volumes:
       - webhook_service_logs:/app/logs
     ports:
-      - "8001:8001"
+      - "8000:8000"  # Webhook service runs on port 8000
     depends_on:
       ai-service:
         condition: service_healthy

@@ -24,6 +24,7 @@ env:
   AWS_EC2_KEY: ${{ secrets.AWS_EC2_PRIVATE_KEY }}
   FIREFLY_BASE_URL: ${{ secrets.FIREFLY_BASE_URL }}
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  
 
 jobs:
   # ===============================
@@ -219,6 +220,11 @@ jobs:
           
           # OpenAI API Key
           OPENAI_API_KEY=${{ env.OPENAI_API_KEY }}
+          
+          # Token Configuration (matching main.py get_firefly_token function)
+          LOCAL_TOKEN=${{ secrets.LOCAL_TOKEN }}
+          FIREFLY_TOKEN_ec2=${{ secrets.FIREFLY_TOKEN_EC2 }}
+          FIREFLY_TOKEN=${{ secrets.FIREFLY_TOKEN }}
           
           # Docker Configuration
           DOCKER_USERNAME=${{ env.DOCKER_USERNAME }}
@@ -548,13 +554,13 @@ jobs:
               
               # Test AI Categorizer Service (Critical)
               core_tests += 1
-              ai_url = base_url.replace(':8080', ':8082') + '/health'
+              ai_url = base_url.replace(':8080', ':8001') + '/health'
               if test_service_health(ai_url, "AI Categorizer"):
                   core_passed += 1
               
               # Test Webhook Service (Critical)
               core_tests += 1
-              webhook_url = base_url.replace(':8080', ':8001') + '/health'
+              webhook_url = base_url.replace(':8080', ':8000') + '/health'
               if test_service_health(webhook_url, "Webhook Service"):
                   core_passed += 1
               

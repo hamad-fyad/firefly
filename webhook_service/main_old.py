@@ -1,4 +1,4 @@
-# Enhanced webhook_service/main.py - Multi-Event AI Financial Intelligence
+# Enhanced webhook_service/main.py - Real Firefly III Webhook Processing
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
@@ -8,10 +8,9 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 import json
-from enum import Enum
 
 # Set up logging
-LOG_DIR = Path(os.environ.get("LOG_DIR", "/tmp/webhook_logs"))  # Use /tmp for local, /app/logs for Docker
+LOG_DIR = Path("./logs")
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE = LOG_DIR / "webhook_service.log"
 
@@ -27,118 +26,54 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Enhanced AI Financial Intelligence Webhook Service", version="2.0.0")
 
-# Allow CORS (if needed for external testing)
+# Allow CORS
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
 
-# Actual Firefly III webhook event types
-class FireflyEventType(str, Enum):
-    # Transaction events
-    STORE_TRANSACTION = "STORE_TRANSACTION"  # When a transaction is created
-    UPDATE_TRANSACTION = "UPDATE_TRANSACTION"  # When a transaction is updated
-    DESTROY_TRANSACTION = "DESTROY_TRANSACTION"  # When a transaction is removed
+# Real Firefly III webhook event types
+class FireflyWebhookType:
+    """Real Firefly III webhook event types."""
+    TRANSACTION_CREATED = "transaction_created"
+    TRANSACTION_UPDATED = "transaction_updated" 
+    TRANSACTION_REMOVED = "transaction_removed"
     
-    # Budget events  
-    STORE_BUDGET = "STORE_BUDGET"  # When a budget is created
-    UPDATE_BUDGET = "UPDATE_BUDGET"  # When a budget is updated or amount is set/changed
-    DESTROY_BUDGET = "DESTROY_BUDGET"  # When a budget is removed
+    BUDGET_CREATED = "budget_created"
+    BUDGET_UPDATED = "budget_updated"
+    BUDGET_REMOVED = "budget_removed"
+    BUDGET_AMOUNT_SET = "budget_amount_set"
+    BUDGET_AMOUNT_CHANGED = "budget_amount_changed"
     
-    # After any event
-    ANY_EVENT = "ANY_EVENT"  # When any of the above happens
-    
-    # Legacy support
-    TRIGGER_STORE_TRANSACTION = "TRIGGER_STORE_TRANSACTION"
+    ANY_EVENT = "any_event"  # After any event
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint for Docker."""
+    """Health check endpoint."""
     return {
         "status": "healthy",
-        "service": "Enhanced AI Financial Intelligence Webhook Service",
+        "service": "Enhanced AI Financial Intelligence Webhook Service", 
         "version": "2.0.0",
+        "enhanced_features": [
+            "Real Firefly III webhook processing",
+            "Multi-event AI analysis",
+            "Transaction intelligence beyond categorization",
+            "Budget feasibility analysis",
+            "Real-time financial insights"
+        ],
         "supported_events": [
             "Transaction: created, updated, removed",
-            "Budget: created, updated, removed", 
-            "Budget amount: set or changed",
-            "After any event"
-        ],
-        "webhook_triggers": [event.value for event in FireflyEventType]
+            "Budget: created, updated, removed, amount set/changed",
+            "Any event processing"
+        ]
     }
 
 # Configuration from environment
 FIREFLY_API_URL = os.environ.get("FIREFLY_API_URL", "http://firefly-app:8000")
+FIREFLY_TOKEN = os.environ.get("FIREFLY_TOKEN")
 AI_SERVICE_URL = os.environ.get("AI_SERVICE_URL", "http://ai-service:8000")
 
-# Environment-aware token selection
-def get_firefly_token():
-    """
-    Automatically select the appropriate Firefly token based on environment.
-    Uses LOCAL_TOKEN for local development, FIREFLY_TOKEN_ec2 for EC2/CI/CD.
-    
-    Priority order:
-    1. If explicitly set to production/staging/ci → use EC2 token
-    2. If running on actual EC2 instance → use EC2 token  
-    3. If local development environment → use LOCAL_TOKEN
-    4. Fallback to FIREFLY_TOKEN
-    """
-    # Check if explicitly set to production/staging/CI environment
-    is_production_env = (
-        os.environ.get("ENVIRONMENT") in ["production", "staging", "ci"] or
-        os.environ.get("APP_ENV") in ["production", "staging"] or
-        os.environ.get("CI") == "true"  # CI/CD pipeline
-    )
-    
-    # Check if running on actual EC2 instance
-    is_actual_ec2 = (
-        os.path.exists("/var/log/cloud-init.log") or  # EC2 indicator
-        os.environ.get("AWS_EXECUTION_ENV") or  # AWS Lambda/ECS
-        os.environ.get("EC2_INSTANCE_ID")  # EC2 explicit
-    )
-    
-    # Check if running locally (development)
-    is_local_dev = (
-        os.environ.get("APP_ENV") == "local" or
-        os.environ.get("ENVIRONMENT") == "local"
-    )
-    
-    # Check for local machine indicators (but not determinative if env vars override)
-    has_local_indicators = (
-        os.path.exists("/Users") or  # macOS indicator
-        (os.path.exists("/home") and not os.path.exists("/var/log/cloud-init.log"))  # Local Linux
-    )
-    
-    logger.info(f"Environment detection:")
-    logger.info(f"  is_production_env: {is_production_env}")
-    logger.info(f"  is_actual_ec2: {is_actual_ec2}")
-    logger.info(f"  is_local_dev: {is_local_dev}")
-    logger.info(f"  has_local_indicators: {has_local_indicators}")
-    
-    # Priority 1: Explicit production/staging/CI environment
-    if is_production_env or is_actual_ec2:
-        token = os.environ.get("FIREFLY_TOKEN_ec2")  # Note: lowercase 'ec2' to match .env file
-        if token:
-            env_type = "production/staging/CI" if is_production_env else "EC2"
-            logger.info(f"Using FIREFLY_TOKEN_ec2 for {env_type} environment")
-            return token
-    
-    # Priority 2: Local development
-    if is_local_dev or (has_local_indicators and not is_production_env):
-        token = os.environ.get("LOCAL_TOKEN")
-        if token:
-            logger.info("Using LOCAL_TOKEN for local development environment")
-            return token
-    
-    # Priority 3: Fallback to standard FIREFLY_TOKEN
-    token = os.environ.get("FIREFLY_TOKEN")
-    if token:
-        logger.info("Using fallback FIREFLY_TOKEN")
-        return token
-    
-    # No token found
-    raise ValueError("No valid Firefly token found. Please set LOCAL_TOKEN (for local) or FIREFLY_TOKEN_ec2 (for EC2/CI/CD)")
-
-FIREFLY_TOKEN = get_firefly_token()
+if not FIREFLY_TOKEN:
+    raise ValueError("FIREFLY_TOKEN environment variable must be set")
 
 headers = {
     "Authorization": f"Bearer {FIREFLY_TOKEN}",
@@ -147,41 +82,64 @@ headers = {
 }
 
 class EnhancedAIProcessor:
-    """Enhanced AI processor for multi-event financial intelligence."""
+    """Enhanced AI processor for real Firefly III webhook events."""
     
     def __init__(self):
         self.ai_service_url = AI_SERVICE_URL
         self.firefly_url = FIREFLY_API_URL
         
-    async def process_event(self, event_type: str, content: Dict[str, Any]) -> Dict[str, Any]:
-        """Route events to appropriate AI processors based on actual Firefly webhook events."""
-        logger.info(f"Processing {event_type} with enhanced AI")
+    async def process_webhook_event(self, webhook_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Process real Firefly III webhook events."""
+        # Extract event type from webhook data
+        trigger = webhook_data.get('trigger', '')
+        object_type = webhook_data.get('response', '')
         
-        # Transaction events
-        if event_type in [FireflyEventType.STORE_TRANSACTION, FireflyEventType.TRIGGER_STORE_TRANSACTION]:
-            return await self.process_transaction_creation(content)
-        elif event_type == FireflyEventType.UPDATE_TRANSACTION:
-            return await self.process_transaction_update(content)
-        elif event_type == FireflyEventType.DESTROY_TRANSACTION:
-            return await self.process_transaction_removal(content)
+        # Determine actual event type from webhook
+        event_type = self.determine_event_type(trigger, object_type, webhook_data)
+        content = webhook_data.get('content', {})
         
-        # Budget events
-        elif event_type == FireflyEventType.STORE_BUDGET:
-            return await self.process_budget_creation(content)
-        elif event_type == FireflyEventType.UPDATE_BUDGET:
-            return await self.process_budget_update_or_amount_change(content)
-        elif event_type == FireflyEventType.DESTROY_BUDGET:
-            return await self.process_budget_removal(content)
+        logger.info(f"Processing real Firefly event: {event_type}")
         
-        # After any event
-        elif event_type == FireflyEventType.ANY_EVENT:
-            return await self.process_any_event(content)
-        
+        # Route to appropriate handler
+        if event_type == FireflyWebhookType.TRANSACTION_CREATED:
+            return await self.process_transaction_created(content)
+        elif event_type == FireflyWebhookType.TRANSACTION_UPDATED:
+            return await self.process_transaction_updated(content)
+        elif event_type == FireflyWebhookType.TRANSACTION_REMOVED:
+            return await self.process_transaction_removed(content)
+        elif event_type == FireflyWebhookType.BUDGET_CREATED:
+            return await self.process_budget_created(content)
+        elif event_type == FireflyWebhookType.BUDGET_UPDATED:
+            return await self.process_budget_updated(content)
+        elif event_type == FireflyWebhookType.BUDGET_REMOVED:
+            return await self.process_budget_removed(content)
+        elif event_type in [FireflyWebhookType.BUDGET_AMOUNT_SET, FireflyWebhookType.BUDGET_AMOUNT_CHANGED]:
+            return await self.process_budget_amount_changed(content)
+        elif event_type == FireflyWebhookType.ANY_EVENT:
+            return await self.process_any_event(webhook_data)
         else:
-            return await self.process_unknown_event(event_type, content)
+            return await self.process_unknown_event(event_type, webhook_data)
     
-    async def process_transaction_creation(self, content: Dict[str, Any]) -> Dict[str, Any]:
-        """Enhanced transaction processing with AI categorization and insights."""
+    def determine_event_type(self, trigger: str, response: str, webhook_data: Dict[str, Any]) -> str:
+        """Determine the actual event type from Firefly webhook data."""
+        # Map Firefly triggers to our event types
+        trigger_map = {
+            'STORE_TRANSACTION': FireflyWebhookType.TRANSACTION_CREATED,
+            'UPDATE_TRANSACTION': FireflyWebhookType.TRANSACTION_UPDATED,
+            'DESTROY_TRANSACTION': FireflyWebhookType.TRANSACTION_REMOVED,
+            'STORE_BUDGET': FireflyWebhookType.BUDGET_CREATED,
+            'UPDATE_BUDGET': FireflyWebhookType.BUDGET_UPDATED,
+            'DESTROY_BUDGET': FireflyWebhookType.BUDGET_REMOVED,
+        }
+        
+        # Check for budget amount changes
+        if 'budget' in response.lower() and 'amount' in str(webhook_data).lower():
+            return FireflyWebhookType.BUDGET_AMOUNT_CHANGED
+            
+        return trigger_map.get(trigger, FireflyWebhookType.ANY_EVENT)
+    
+    async def process_transaction_created(self, content: Dict[str, Any]) -> Dict[str, Any]:
+        """Enhanced processing for new transactions."""
         transactions = content.get('transactions', [])
         if not transactions:
             return {"status": "error", "reason": "no transactions"}
@@ -194,10 +152,12 @@ class EnhancedAIProcessor:
         if not description:
             return {"status": "ignored", "reason": "no description"}
         
-        # Get AI categorization (existing logic)
+        logger.info(f"Processing new transaction: {description} (${amount})")
+        
+        # Get AI categorization
         prediction = await get_category_prediction(description, tx_id)
         
-        # NEW: Enhanced AI analysis
+        # Enhanced AI analysis
         ai_insights = await self.get_transaction_insights(transaction)
         
         # Handle categorization
@@ -208,6 +168,7 @@ class EnhancedAIProcessor:
         confidence = prediction.get("confidence", 0.0)
         
         if confidence < 0.3:
+            logger.info(f"Low confidence ({confidence:.2f}) for categorization")
             return {"status": "low_confidence", "confidence": confidence, "insights": ai_insights}
         
         # Update transaction with category
@@ -218,23 +179,60 @@ class EnhancedAIProcessor:
         await self.store_transaction_analytics(tx_id, ai_insights)
         
         return {
-            "status": "enhanced_processing_complete",
+            "status": "transaction_enhanced",
             "transaction_id": tx_id,
             "category": category,
             "confidence": confidence,
             "ai_insights": ai_insights
         }
     
-    async def process_budget_creation(self, content: Dict[str, Any]) -> Dict[str, Any]:
+    async def process_transaction_updated(self, content: Dict[str, Any]) -> Dict[str, Any]:
+        """Analyze transaction updates for pattern changes."""
+        try:
+            transactions = content.get('transactions', [])
+            if transactions:
+                transaction = transactions[0]
+                tx_id = transaction.get("transaction_journal_id")
+                logger.info(f"Analyzing transaction update: {tx_id}")
+                
+                # Re-analyze with AI for any changes
+                ai_insights = await self.get_transaction_insights(transaction)
+                
+                return {
+                    "status": "transaction_update_analyzed",
+                    "transaction_id": tx_id,
+                    "insights": ai_insights
+                }
+        except Exception as e:
+            logger.error(f"Error processing transaction update: {str(e)}")
+            
+        return {"status": "update_processed"}
+    
+    async def process_transaction_removed(self, content: Dict[str, Any]) -> Dict[str, Any]:
+        """Analyze impact of transaction deletion."""
+        try:
+            # Analyze spending pattern impact
+            impact_analysis = await self.analyze_deletion_impact(content)
+            
+            return {
+                "status": "deletion_analyzed",
+                "impact": impact_analysis
+            }
+        except Exception as e:
+            logger.error(f"Error processing transaction deletion: {str(e)}")
+            
+        return {"status": "deletion_processed"}
+    
+    async def process_budget_created(self, content: Dict[str, Any]) -> Dict[str, Any]:
         """AI analysis of new budget creation."""
         try:
             budget_data = content.get('budget', {}) or content
             budget_name = budget_data.get('name', 'Unknown Budget')
             
-            # Analyze budget with AI
-            analysis = await self.analyze_budget_feasibility(budget_data)
+            logger.info(f"Analyzing new budget: {budget_name}")
             
-            logger.info(f"Budget '{budget_name}' created - AI analysis: {analysis}")
+            # Analyze budget feasibility with AI
+            analysis = await self.analyze_budget_feasibility(budget_data)
             
             return {
                 "status": "budget_analyzed", 
@@ -245,124 +243,75 @@ class EnhancedAIProcessor:
             logger.error(f"Error processing budget creation: {str(e)}")
             return {"status": "analysis_failed", "error": str(e)}
     
-    async def process_account_creation(self, content: Dict[str, Any]) -> Dict[str, Any]:
-        """AI analysis of new account creation."""
-        try:
-            account_data = content.get('account', {}) or content
-            account_name = account_data.get('name', 'Unknown Account')
-            account_type = account_data.get('type', 'asset')
-            
-            # Analyze account impact
-            analysis = await self.analyze_account_impact(account_data)
-            
-            logger.info(f"Account '{account_name}' ({account_type}) created - AI analysis: {analysis}")
-            
-            return {
-                "status": "account_analyzed",
-                "account_name": account_name,
-                "ai_analysis": analysis
-            }
-        except Exception as e:
-            logger.error(f"Error processing account creation: {str(e)}")
-            return {"status": "analysis_failed", "error": str(e)}
-    
-    async def process_transaction_update(self, content: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze transaction updates for pattern changes."""
-        return {"status": "update_processed", "insights": "Transaction update analyzed"}
-    
-    async def process_transaction_deletion(self, content: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze impact of transaction deletion."""
-        return {"status": "deletion_processed", "insights": "Transaction deletion impact analyzed"}
-    
-    async def process_budget_update(self, content: Dict[str, Any]) -> Dict[str, Any]:
+    async def process_budget_updated(self, content: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze budget modifications."""
-        return {"status": "budget_update_processed", "insights": "Budget update analyzed"}
-    
-    async def process_account_update(self, content: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze account modifications."""
-        return {"status": "account_update_processed", "insights": "Account update analyzed"}
-    
-    async def process_generic_event(self, event_type: str, content: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle other Firefly events."""
-        logger.info(f"Processing generic event: {event_type}")
-        return {"status": "generic_event_processed", "event_type": event_type}
-    
-    async def process_transaction_removal(self, content: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle transaction removal events."""
-        logger.info("Processing transaction removal")
-        try:
-            # Analyze spending pattern impact when transaction is removed
-            return {
-                "status": "transaction_removed_processed",
-                "insights": "Transaction removal impact analyzed"
-            }
-        except Exception as e:
-            logger.error(f"Error processing transaction removal: {str(e)}")
-            return {"status": "removal_failed", "error": str(e)}
-    
-    async def process_budget_update_or_amount_change(self, content: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle budget updates or amount changes."""
-        logger.info("Processing budget update or amount change")
         try:
             budget_data = content.get('budget', {}) or content
             budget_name = budget_data.get('name', 'Unknown Budget')
             
-            # Check if this is an amount change
-            old_amount = budget_data.get('old_amount')
-            new_amount = budget_data.get('new_amount') or budget_data.get('amount')
+            logger.info(f"Analyzing budget update: {budget_name}")
             
-            if old_amount and new_amount:
-                logger.info(f"Budget amount changed from {old_amount} to {new_amount}")
-                return {
-                    "status": "budget_amount_changed",
-                    "budget_name": budget_name,
-                    "old_amount": old_amount,
-                    "new_amount": new_amount,
-                    "insights": "Budget amount change analyzed"
-                }
-            else:
-                logger.info(f"Budget updated: {budget_name}")
-                return {
-                    "status": "budget_updated",
-                    "budget_name": budget_name,
-                    "insights": "Budget update analyzed"
-                }
+            # Analyze update impact
+            analysis = await self.analyze_budget_update_impact(budget_data)
+            
+            return {
+                "status": "budget_update_analyzed",
+                "budget_name": budget_name,
+                "impact_analysis": analysis
+            }
         except Exception as e:
             logger.error(f"Error processing budget update: {str(e)}")
-            return {"status": "budget_update_failed", "error": str(e)}
+            return {"status": "update_failed", "error": str(e)}
     
-    async def process_budget_removal(self, content: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle budget removal events."""
-        logger.info("Processing budget removal")
+    async def process_budget_removed(self, content: Dict[str, Any]) -> Dict[str, Any]:
+        """Analyze budget deletion impact."""
         try:
-            budget_data = content.get('budget', {}) or content
-            budget_name = budget_data.get('name', 'Unknown Budget')
+            logger.info("Analyzing budget deletion impact")
+            impact = await self.analyze_budget_deletion_impact(content)
             
             return {
-                "status": "budget_removed_processed",
-                "budget_name": budget_name,
-                "insights": "Budget removal impact analyzed"
+                "status": "budget_deletion_analyzed",
+                "impact": impact
             }
         except Exception as e:
-            logger.error(f"Error processing budget removal: {str(e)}")
-            return {"status": "budget_removal_failed", "error": str(e)}
+            logger.error(f"Error processing budget deletion: {str(e)}")
+            return {"status": "deletion_failed", "error": str(e)}
     
-    async def process_any_event(self, content: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle 'after any event' webhooks."""
-        logger.info("Processing 'after any event' webhook")
+    async def process_budget_amount_changed(self, content: Dict[str, Any]) -> Dict[str, Any]:
+        """Analyze budget amount changes."""
         try:
-            # This fires after any of the above events happen
+            budget_data = content.get('budget', {}) or content
+            logger.info("Analyzing budget amount change")
+            
+            # Analyze spending vs new budget amounts
+            analysis = await self.analyze_budget_amount_impact(budget_data)
+            
             return {
-                "status": "any_event_processed", 
-                "insights": "Comprehensive analysis of recent financial activity",
-                "timestamp": datetime.now().isoformat()
+                "status": "budget_amount_analyzed",
+                "analysis": analysis
+            }
+        except Exception as e:
+            logger.error(f"Error processing budget amount change: {str(e)}")
+            return {"status": "amount_analysis_failed", "error": str(e)}
+    
+    async def process_any_event(self, webhook_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Process 'after any event' webhooks."""
+        try:
+            logger.info("Processing 'any event' webhook")
+            
+            # Generate comprehensive analysis
+            analysis = await self.generate_comprehensive_analysis(webhook_data)
+            
+            return {
+                "status": "comprehensive_analysis_complete",
+                "analysis": analysis
             }
         except Exception as e:
             logger.error(f"Error processing any event: {str(e)}")
             return {"status": "any_event_failed", "error": str(e)}
     
-    async def process_unknown_event(self, event_type: str, content: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle unknown event types."""
+    async def process_unknown_event(self, event_type: str, webhook_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle unknown or new event types."""
         logger.warning(f"Unknown event type: {event_type}")
         return {
             "status": "unknown_event",
@@ -554,77 +503,80 @@ async def get_or_create_category(category: str) -> str:
         logger.error(f"Error managing category '{category}': {str(e)}")
         raise HTTPException(status_code=500, detail=f"Category management failed: {str(e)}")
 
-@app.post("/webhook")
-async def handle_enhanced_webhook(req: Request):
-    """Enhanced webhook handler for all Firefly III events with AI intelligence."""
+# AI Processor instance
+ai_processor = EnhancedAIProcessor()
+
+# Environment configuration
+AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "http://localhost:8001")
+FIREFLY_API_URL = os.getenv("FIREFLY_API_URL", "http://localhost")
+FIREFLY_TOKEN = os.getenv("FIREFLY_TOKEN", "")
+
+# Headers for API calls
+API_HEADERS = {
+    "Authorization": f"Bearer {FIREFLY_TOKEN}",
+    "Accept": "application/json",
+    "Content-Type": "application/json"
+}
+
+async def get_category_prediction(description: str, tx_id: str) -> Dict[str, Any]:
+    """Get AI category prediction for transaction."""
     try:
-        data = await req.json()
-        event_type = data.get("trigger", "")
-        content = data.get("content", {})
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{AI_SERVICE_URL}/predict",
+                json={"description": description, "transaction_id": tx_id},
+                headers={"Accept": "application/json"}
+            )
         
-        logger.info(f"Enhanced webhook received: {event_type}")
-        logger.info(f"Event content keys: {list(content.keys())}")
-        
-        # Process with enhanced AI
-        result = await ai_processor.process_event(event_type, content)
-        
-        logger.info(f"Enhanced processing result: {result}")
-        return result
-        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            logger.warning(f"AI service returned {response.status_code}")
+            return {"status": "no_model"}
     except Exception as e:
-        logger.error(f"Enhanced webhook processing failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Enhanced processing failed: {str(e)}")
+        logger.warning(f"Could not get prediction: {str(e)}")
+        return {"status": "no_model"}
 
-# Legacy webhook endpoint for backward compatibility
-@app.post("/webhook/legacy")
-async def handle_legacy_webhook(req: Request):
-    """Legacy webhook handler - transaction categorization only."""
+async def get_or_create_category(category_name: str) -> Optional[str]:
+    """Get existing category ID or create new category."""
     try:
-        data = await req.json()
-        logger.info(f"Legacy webhook: {data.get('trigger')}")
-
-        # Verify this is a transaction creation event
-        if data.get("trigger") not in ["TRIGGER_STORE_TRANSACTION", "STORE_TRANSACTION"]:
-            return {"status": "ignored", "reason": "not a transaction event"}
-
-        content = data.get("content", {})
-        transactions = content.get('transactions', [])
-        if not transactions:
-            raise HTTPException(status_code=400, detail="No transactions found")
-            
-        transaction = transactions[0]
-        tx_id = transaction.get("transaction_journal_id")
-        desc = transaction.get('description', "")
+        # Search for existing category
+        async with httpx.AsyncClient() as client:
+            search_response = await client.get(
+                f"{FIREFLY_API_URL}/api/v1/categories",
+                headers=API_HEADERS,
+                params={"name": category_name}
+            )
         
-        if not tx_id or not desc:
-            return {"status": "ignored", "reason": "missing data"}
-
-        # Get AI prediction
-        prediction = await get_category_prediction(desc, tx_id)
+        if search_response.status_code == 200:
+            categories = search_response.json().get("data", [])
+            for cat in categories:
+                if cat["attributes"]["name"].lower() == category_name.lower():
+                    return cat["id"]
         
-        if prediction.get("status") == "no_model":
-            return {"status": "no_model_available"}
-            
-        category = prediction.get("category", "Uncategorized")
-        confidence = prediction.get("confidence", 0.0)
-
-        if confidence < 0.3:
-            return {"status": "ignored", "reason": "low confidence", "confidence": confidence}
-
-        # Update transaction
-        cat_id = await get_or_create_category(category)
-        await ai_processor.update_transaction_category(tx_id, cat_id)
-
-        return {
-            "status": "category_updated",
-            "transaction_id": tx_id,
-            "category": category,
-            "confidence": confidence
+        # Create new category if not found
+        category_data = {
+            "name": category_name,
+            "notes": f"Auto-created by AI categorization"
         }
         
+        async with httpx.AsyncClient() as client:
+            create_response = await client.post(
+                f"{FIREFLY_API_URL}/api/v1/categories",
+                headers=API_HEADERS,
+                json=category_data
+            )
+        
+        if create_response.status_code == 200:
+            new_category = create_response.json()
+            return new_category["data"]["id"]
+        else:
+            logger.warning(f"Failed to create category: {create_response.status_code}")
+            return None
+            
     except Exception as e:
-        logger.error(f"Legacy webhook error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Legacy processing failed: {str(e)}")
+        logger.error(f"Error managing category '{category_name}': {str(e)}")
+        return None
 
 @app.post("/feedback")
 async def handle_feedback(req: Request):
@@ -637,6 +589,9 @@ async def handle_feedback(req: Request):
 
         # Get transaction details
         tx_data = await get_transaction_details(tx_id)
+        if not tx_data:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+            
         desc = tx_data["attributes"].get("description", "")
         category = tx_data["attributes"].get("category_name")
         
@@ -648,23 +603,47 @@ async def handle_feedback(req: Request):
             async with httpx.AsyncClient() as client:
                 feedback_res = await client.post(
                     f"{AI_SERVICE_URL}/feedback",
-                    json={"description": desc, "category": category}
+                    json={"description": desc, "category": category},
+                    headers={"Accept": "application/json"}
                 )
+            
             if feedback_res.status_code == 200:
                 logger.info(f"Sent feedback for transaction {tx_id}")
                 return {"status": "feedback_sent"}
             else:
                 logger.warning(f"Failed to send feedback: {feedback_res.status_code}")
-                return {"status": "feedback_failed", "error": feedback_res.text}
+                return {"status": "feedback_failed", "error": "AI service unavailable"}
+                
         except Exception as e:
             logger.error(f"Error sending feedback: {str(e)}")
             return {"status": "feedback_failed", "error": str(e)}
 
+        return {"status": "feedback_processed"}
+        
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error handling feedback: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Feedback processing failed: {str(e)}")
+
+async def get_transaction_details(tx_id: str) -> Optional[Dict[str, Any]]:
+    """Get transaction details from Firefly III."""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{FIREFLY_API_URL}/api/v1/transactions/{tx_id}",
+                headers=API_HEADERS
+            )
+        
+        if response.status_code == 200:
+            return response.json().get("data")
+        else:
+            logger.warning(f"Failed to get transaction {tx_id}: {response.status_code}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Error getting transaction {tx_id}: {str(e)}")
+        return None
 
 # NEW: Enhanced Analytics Endpoints
 @app.get("/analytics/real-time-insights")
@@ -778,11 +757,49 @@ async def get_financial_health():
         logger.error(f"Error getting financial health: {str(e)}")
         return {"status": "health_analysis_unavailable"}
 
+@app.post("/webhook")
+async def webhook_handler(request: Request):
+    """Handle real Firefly III webhook events."""
+    logger.info("Received Firefly III webhook")
+    
+    try:
+        # Get webhook data
+        webhook_data = await request.json()
+        logger.info(f"Webhook data: {json.dumps(webhook_data, indent=2)}")
+        
+        # Initialize enhanced AI processor
+        processor = EnhancedAIProcessor()
+        
+        # Process the webhook event
+        result = await processor.process_webhook_event(webhook_data)
+        
+        logger.info(f"Processing result: {result}")
+        
+        return {
+            "status": "webhook_processed",
+            "timestamp": datetime.now().isoformat(),
+            "result": result
+        }
+        
+    except Exception as e:
+        logger.error(f"Webhook processing error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Webhook processing failed: {str(e)}")
+
 @app.get("/analytics/event-summary")
 async def get_event_processing_summary():
     """Get summary of processed Firefly events and AI insights."""
     return {
-        "supported_events": [event.value for event in FireflyEventType],
+        "supported_events": [
+            FireflyWebhookType.TRANSACTION_CREATED,
+            FireflyWebhookType.TRANSACTION_UPDATED,
+            FireflyWebhookType.TRANSACTION_REMOVED,
+            FireflyWebhookType.BUDGET_CREATED,
+            FireflyWebhookType.BUDGET_UPDATED,
+            FireflyWebhookType.BUDGET_REMOVED,
+            FireflyWebhookType.BUDGET_AMOUNT_SET,
+            FireflyWebhookType.BUDGET_AMOUNT_CHANGED,
+            FireflyWebhookType.ANY_EVENT
+        ],
         "processing_stats": {
             "events_processed_today": 45,
             "ai_insights_generated": 38,
