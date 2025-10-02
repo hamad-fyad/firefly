@@ -2,7 +2,7 @@ name: 🚀 CI/CD - Build, Deploy & Test Firefly AI Stack
 
 on:
   push:
-    branches: [ main, develop, intgrate_with_chatgpt ]
+    branches: [ main, develop, intgrate_with_chatgpt ,adding-new-feature-for-ai]
   workflow_dispatch:
     inputs:
       force_deploy:
