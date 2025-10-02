@@ -67,8 +67,8 @@ async def health_check():
     }
 
 # Configuration from environment
-FIREFLY_API_URL = os.environ.get("FIREFLY_API_URL", "http://firefly-app:8000")
-AI_SERVICE_URL = os.environ.get("AI_SERVICE_URL", "http://ai-service:8000")
+FIREFLY_API_URL = os.environ.get("FIREFLY_API_URL", "http://firefly-app:8080")
+AI_SERVICE_URL = os.environ.get("AI_SERVICE_URL", "http://ai-service:8001")
 
 # Environment-aware token selection
 def get_firefly_token():
