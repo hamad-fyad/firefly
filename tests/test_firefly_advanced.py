@@ -23,6 +23,7 @@ Prerequisites:
 - Firefly III instance must be running and accessible
 - Valid API token must be configured in config.py
 - Tests require actual API connectivity (not mocked)
+
 """
 
 import requests
