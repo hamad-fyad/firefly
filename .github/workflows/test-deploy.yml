@@ -1,0 +1,57 @@
+name: 🧪 Test Deploy - Manual EC2 Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_type:
+        description: 'Type of deployment test'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+        - debug
+        - full
+
+jobs:
+  debug-conditions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🐛 Debug All Conditions
+        run: |
+          echo "🔍 Debugging workflow conditions:"
+          echo "Current ref: ${{ github.ref }}"
+          echo "Event name: ${{ github.event_name }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Is main: ${{ github.ref == 'refs/heads/main' }}"
+          echo "Is intgrate_with_chatgpt: ${{ github.ref == 'refs/heads/intgrate_with_chatgpt' }}"
+          echo ""
+          echo "🔑 Checking secrets:"
+          echo "AWS_EC2_HOST exists: ${{ secrets.AWS_EC2_HOST != '' }}"
+          echo "AWS_EC2_USER exists: ${{ secrets.AWS_EC2_USER != '' }}"
+          echo "AWS_EC2_KEY exists: ${{ secrets.AWS_EC2_PRIVATE_KEY != '' }}"
+          echo "DOCKER_USERNAME exists: ${{ secrets.DOCKER_USERNAME != '' }}"
+          echo "DOCKER_PASSWORD exists: ${{ secrets.DOCKER_PASSWORD != '' }}"
+          echo "FIREFLY_BASE_URL exists: ${{ secrets.FIREFLY_BASE_URL != '' }}"
+          echo "OPENAI_API_KEY exists: ${{ secrets.OPENAI_API_KEY != '' }}"
+
+  mock-build:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.deploy_type == 'full'
+    outputs:
+      version: test-version-${{ github.run_number }}
+    steps:
+      - name: 📝 Mock Build Success
+        run: |
+          echo "🎭 Simulating successful build..."
+          echo "Version: test-version-${{ github.run_number }}"
+
+  test-deploy:
+    runs-on: ubuntu-latest
+    needs: [debug-conditions, mock-build]
+    if: always() && (github.event.inputs.deploy_type == 'full' && needs.mock-build.result == 'success')
+    steps:
+      - name: 🚀 Test Deploy Conditions
+        run: |
+          echo "🎯 Deploy test would run here!"
+          echo "Mock build result: ${{ needs.mock-build.result }}"
+          echo "Version: ${{ needs.mock-build.outputs.version }}"

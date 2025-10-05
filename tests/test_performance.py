@@ -1,6 +1,9 @@
 """
-Performance and benchmark tests for Firefly III test suite.
-These tests measure execution time and performance characteristics.
+Performance and Load Testing - System Scalability and Response Time Validation
+
+Tests system performance under various load conditions and measures response times.
+Validates that the Firefly III system and AI services maintain acceptable performance
+as data volume and request frequency increase.
 """
 
 import pytest

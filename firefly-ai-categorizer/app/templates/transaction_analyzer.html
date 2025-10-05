@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔍 AI Transaction Analyzer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .ai-badge {
+            display: inline-block;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: bold;
+            margin-left: 10px;
+            animation: glow 2s infinite alternate;
+        }
+
+        @keyframes glow {
+            from { box-shadow: 0 0 5px rgba(102, 126, 234, 0.5); }
+            to { box-shadow: 0 0 20px rgba(102, 126, 234, 0.8), 0 0 30px rgba(118, 75, 162, 0.6); }
+        }
+
+        .nav-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .nav-link:hover {
+            background: #5a6fd8;
+            transform: translateY(-2px);
+        }
+        
+        .analysis-section {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .input-panel {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+        
+        .results-panel {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+        
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .analyze-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .analyze-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+        
+        .analyze-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 1.2em;
+            color: #667eea;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+        
+        .results-section {
+            animation: fadeIn 0.5s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .category-result {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .category-result h3 {
+            font-size: 1.8em;
+            margin-bottom: 10px;
+        }
+        
+        .confidence-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 4px;
+            margin: 15px 0;
+            overflow: hidden;
+        }
+        
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00b894, #00cec9);
+            border-radius: 4px;
+            transition: width 1s ease;
+        }
+        
+        .insights-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+        
+        .insight-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            border-left: 4px solid #667eea;
+        }
+        
+        .insight-card h4 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+        
+        .insight-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .insight-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+            color: #666;
+        }
+        
+        .insight-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .amount-indicator {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.8em;
+        }
+        
+        .amount-high { background: #ff7675; color: white; }
+        .amount-normal { background: #fdcb6e; color: white; }
+        .amount-low { background: #00b894; color: white; }
+        
+        .charts-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-top: 30px;
+        }
+        
+        .chart-container {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+        
+        .chart-container h3 {
+            margin-bottom: 20px;
+            color: #333;
+            text-align: center;
+        }
+        
+        .example-btn {
+            background: #74b9ff;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            margin: 5px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s ease;
+        }
+        
+        .example-btn:hover {
+            background: #0984e3;
+            transform: translateY(-1px);
+        }
+        
+        @media (max-width: 768px) {
+            .analysis-section {
+                grid-template-columns: 1fr;
+            }
+            
+            .charts-section {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="/analytics-hub" class="nav-link">← Back to AI Analytics Hub</a>
+            <h1>🔍 AI Transaction Analyzer</h1>
+            <p>Intelligent real-time transaction analysis with AI categorization using OpenAI API</p>
+        </div>
+        
+        <div class="analysis-section">
+            <div class="input-panel">
+                <h3>📝 Transaction Details</h3>
+                <form id="transactionForm">
+                    <div class="form-group">
+                        <label for="description">Transaction Description</label>
+                        <input type="text" id="description" name="description" 
+                               placeholder="e.g., Coffee at Starbucks downtown" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="amount">Amount ($)</label>
+                        <input type="number" id="amount" name="amount" step="0.01" 
+                               placeholder="25.50" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="type">Transaction Type</label>
+                        <select id="type" name="type">
+                            <option value="withdrawal">Withdrawal</option>
+                            <option value="deposit">Deposit</option>
+                            <option value="transfer">Transfer</option>
+                        </select>
+                    </div>
+                    
+                    <button type="submit" id="analyzeBtn" class="analyze-btn">
+                        🤖 Analyze with AI
+                    </button>
+                </form>
+                
+                <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee;">
+                    <h4>📝 Quick AI Examples:</h4>
+                    <button class="example-btn" onclick="loadExample('Coffee at Starbucks', '4.95', 'withdrawal')">
+                        ☕ Coffee Purchase
+                    </button>
+                    <button class="example-btn" onclick="loadExample('Uber ride to airport', '35.00', 'withdrawal')">
+                        🚗 Uber Ride
+                    </button>
+                    <button class="example-btn" onclick="loadExample('Amazon online shopping', '67.43', 'withdrawal')">
+                        📦 Online Shopping
+                    </button>
+                </div>
+            </div>
+            
+            <div class="results-panel">
+                <div id="loadingState" class="loading" style="display: none;">
+                    🤖 AI is analyzing your transaction with OpenAI...
+                </div>
+                
+                <div id="resultsSection" class="results-section">
+                    <div class="category-result" id="categoryResult">
+                        <h3 id="categoryName">Ready for AI Analysis</h3>
+                        <p id="categoryDescription">Enter transaction details to get AI-powered insights using OpenAI API</p>
+                        <div class="confidence-bar">
+                            <div id="confidenceFill" class="confidence-fill" style="width: 0%"></div>
+                        </div>
+                        <p id="confidenceText">AI Confidence: 0%</p>
+                    </div>
+                    
+                    <div class="insights-grid" id="insightsGrid">
+                        <!-- AI Insights will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="charts-section" id="chartsSection" style="display: none;">
+            <div class="chart-container">
+                <h3>📊 AI Spending Analysis</h3>
+                <canvas id="spendingChart" width="400" height="250"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3>🎯 AI Pattern Recognition</h3>
+                <canvas id="patternChart" width="400" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let spendingChart, patternChart;
+        
+        document.getElementById('transactionForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await analyzeTransaction();
+        });
+        
+        async function analyzeTransaction() {
+            const form = document.getElementById('transactionForm');
+            const formData = new FormData(form);
+            
+            const data = {
+                description: formData.get('description'),
+                amount: formData.get('amount'),
+                type: formData.get('type')
+            };
+            
+            // Show loading state
+            document.getElementById('loadingState').style.display = 'block';
+            document.getElementById('resultsSection').style.display = 'none';
+            document.getElementById('analyzeBtn').disabled = true;
+            document.getElementById('analyzeBtn').textContent = '🔄 AI Processing...';
+            
+            try {
+                const response = await fetch('/analyze-transaction', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    displayResults(result, data);
+                } else {
+                    throw new Error(result.error || 'AI Analysis failed');
+                }
+                
+            } catch (error) {
+                console.error('AI Analysis error:', error);
+                displayError(error.message);
+            } finally {
+                document.getElementById('loadingState').style.display = 'none';
+                document.getElementById('analyzeBtn').disabled = false;
+                document.getElementById('analyzeBtn').textContent = '🤖 Analyze with AI';
+            }
+        }
+        
+        function displayResults(result, originalData) {
+            // Update category result
+            const categoryName = result.categorization?.category || result.categorization || 'Unknown';
+            const confidence = result.categorization?.confidence || 0.85;
+            
+            document.getElementById('categoryName').textContent = categoryName;
+            document.getElementById('categoryDescription').textContent = 
+                `AI categorized "${originalData.description}" using OpenAI with high confidence`;
+            
+            // Update confidence bar
+            const confidencePercent = Math.round(confidence * 100);
+            document.getElementById('confidenceFill').style.width = confidencePercent + '%';
+            document.getElementById('confidenceText').textContent = `AI Confidence: ${confidencePercent}%`;
+            
+            // Update insights grid
+            const insightsGrid = document.getElementById('insightsGrid');
+            insightsGrid.innerHTML = '';
+            
+            // AI Spending Analysis
+            if (result.spending_analysis) {
+                const spendingCard = createInsightCard(
+                    '💰 AI Spending Analysis',
+                    [
+                        `Amount Level: <span class="amount-indicator amount-${result.spending_analysis.amount_analysis}">${result.spending_analysis.amount_analysis.toUpperCase()}</span>`,
+                        `Transaction Frequency: ${result.spending_analysis.transaction_frequency}`,
+                        `Budget Impact: ${result.spending_analysis.budget_impact}`
+                    ]
+                );
+                insightsGrid.appendChild(spendingCard);
+            }
+            
+            // AI Pattern Recognition
+            if (result.pattern_recognition) {
+                const patternCard = createInsightCard(
+                    '🎯 AI Pattern Recognition',
+                    [
+                        `Merchant History: ${result.pattern_recognition.merchant_history}`,
+                        `Spending Velocity: ${result.pattern_recognition.spending_velocity}`,
+                        `Anomaly Score: ${result.pattern_recognition.anomaly_score || 'Low'}`
+                    ]
+                );
+                insightsGrid.appendChild(patternCard);
+            }
+            
+            // AI Recommendations
+            if (result.recommendations) {
+                const recommendationsCard = createInsightCard(
+                    '💡 AI Recommendations',
+                    result.recommendations
+                );
+                insightsGrid.appendChild(recommendationsCard);
+            }
+            
+            // Show results and charts
+            document.getElementById('resultsSection').style.display = 'block';
+            document.getElementById('chartsSection').style.display = 'grid';
+            
+            // Update charts
+            updateCharts(result, originalData);
+        }
+        
+        function createInsightCard(title, items) {
+            const card = document.createElement('div');
+            card.className = 'insight-card';
+            
+            const titleElement = document.createElement('h4');
+            titleElement.textContent = title;
+            card.appendChild(titleElement);
+            
+            const list = document.createElement('ul');
+            list.className = 'insight-list';
+            
+            items.forEach(item => {
+                const listItem = document.createElement('li');
+                listItem.innerHTML = item;
+                list.appendChild(listItem);
+            });
+            
+            card.appendChild(list);
+            return card;
+        }
+        
+        function displayError(message) {
+            const categoryName = document.getElementById('categoryName');
+            const categoryDescription = document.getElementById('categoryDescription');
+            
+            categoryName.textContent = 'AI Analysis Error';
+            categoryDescription.textContent = `Error: ${message}`;
+            
+            document.getElementById('resultsSection').style.display = 'block';
+        }
+        
+        function loadExample(description, amount, type) {
+            document.getElementById('description').value = description;
+            document.getElementById('amount').value = amount;
+            document.getElementById('type').value = type;
+        }
+        
+        function updateCharts(result, originalData) {
+            
+            // Create pattern recognition chart
+            const patternCtx = document.getElementById('patternChart').getContext('2d');
+            
+            if (patternChart) {
+                patternChart.destroy();
+            }
+            
+            patternChart = new Chart(patternCtx, {
+                type: 'radar',
+                data: {
+                    labels: ['Frequency', 'Amount', 'Timing', 'Category Match', 'Confidence'],
+                    datasets: [{
+                        label: 'AI Pattern Score',
+                        data: [
+                            result.pattern_recognition?.frequency_score || 80,
+                            result.spending_analysis?.amount_analysis === 'high' ? 90 : 70,
+                            85,
+                            Math.round((result.categorization?.confidence || 0.85) * 100),
+                            Math.round((result.categorization?.confidence || 0.85) * 100)
+                        ],
+                        backgroundColor: 'rgba(102, 126, 234, 0.2)',
+                        borderColor: '#667eea',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 100
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>

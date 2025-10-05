@@ -30,7 +30,7 @@ if os.getenv('GITHUB_ACTIONS'):
 elif "local" in BASE_URL: # if running locally, use the local API token
     API_TOKEN = os.getenv("API_TESTING_TOKEN2") 
 else:
-    API_TOKEN = os.getenv("API_TESTING_TOKEN")
+    API_TOKEN = os.getenv("FIREFLY_TOKEN2")
     
 STATIC_CRON_TOKEN = os.getenv("STATIC_CRON_TOKEN")
 

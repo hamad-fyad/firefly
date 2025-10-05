@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📊 AI Budget Analyzer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            min-height: 100vh; padding: 20px;
+        }
+        .container {
+            max-width: 1400px; margin: 0 auto; background: white;
+            border-radius: 15px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); padding: 30px;
+        }
+        .header { text-align: center; margin-bottom: 30px; color: #333; }
+        .header h1 {
+            font-size: 2.5em; margin-bottom: 10px;
+            background: linear-gradient(45deg, #11998e, #38ef7d);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        }
+
+        .ai-badge {
+            display: inline-block;
+            background: linear-gradient(45deg, #11998e, #38ef7d);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: bold;
+            margin-left: 10px;
+            animation: glow 2s infinite alternate;
+        }
+
+        @keyframes glow {
+            from { box-shadow: 0 0 5px rgba(17, 153, 142, 0.5); }
+            to { box-shadow: 0 0 20px rgba(17, 153, 142, 0.8), 0 0 30px rgba(56, 239, 125, 0.6); }
+        }
+
+        .nav-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            padding: 8px 16px;
+            background: #11998e;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .nav-link:hover {
+            background: #0f8a7e;
+            transform: translateY(-2px);
+        }
+
+        .budget-section { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px; }
+        .input-panel, .analysis-panel {
+            background: #f8f9fa; padding: 25px; border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 8px; font-weight: 600; color: #333; }
+        .form-group input, .form-group select {
+            width: 100%; padding: 12px; border: 2px solid #e1e5e9; border-radius: 8px;
+            font-size: 16px; transition: border-color 0.3s ease;
+        }
+        .form-group input:focus, .form-group select:focus { outline: none; border-color: #11998e; }
+        .analyze-btn {
+            width: 100%; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white; border: none; padding: 15px; border-radius: 8px;
+            font-size: 16px; font-weight: 600; cursor: pointer; transition: transform 0.3s ease;
+        }
+        .analyze-btn:hover { transform: translateY(-2px); }
+        .analyze-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        .score-display { text-align: center; margin-bottom: 25px; }
+        .realism-score {
+            display: inline-block; font-size: 3em; font-weight: bold;
+            background: linear-gradient(45deg, #11998e, #38ef7d);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+            margin-bottom: 10px;
+        }
+        .score-label { display: block; color: #666; font-size: 1.1em; margin-bottom: 15px; }
+        .success-probability {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            color: white; padding: 15px; border-radius: 10px; margin: 15px 0;
+        }
+        .success-bar {
+            background: rgba(255,255,255,0.3); height: 12px; border-radius: 6px;
+            overflow: hidden; margin: 10px 0;
+        }
+        .success-fill { height: 100%; background: white; border-radius: 6px; transition: width 0.8s ease; }
+        .analysis-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px; margin: 30px 0;
+        }
+        .analysis-card {
+            background: white; padding: 20px; border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1); border-left: 4px solid #11998e;
+        }
+        .analysis-card h4 { color: #11998e; margin-bottom: 10px; font-size: 1.2em; }
+        .recommendations-list, .risk-list { list-style: none; padding: 0; }
+        .recommendations-list li { padding: 8px 0; border-bottom: 1px solid #eee; position: relative; padding-left: 25px; }
+        .recommendations-list li:before { content: "💡"; position: absolute; left: 0; }
+        .risk-list li { padding: 8px 0; border-bottom: 1px solid #eee; position: relative; padding-left: 25px; color: #d32f2f; }
+        .risk-list li:before { content: "⚠️"; position: absolute; left: 0; }
+        .charts-section { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 30px; }
+        .chart-container {
+            background: #f8f9fa; padding: 20px; border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08); height: 350px;
+        }
+        .chart-container h3 { margin-bottom: 15px; color: #333; text-align: center; }
+        .loading { 
+            text-align: center; color: #11998e; font-style: italic; padding: 40px; font-size: 1.2em;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+        .budget-templates { margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee; }
+        .template-btn {
+            display: block; width: 100%; margin: 5px 0; padding: 10px 15px;
+            background: #e8f5e8; border: 1px solid #c8e6c9; border-radius: 5px;
+            cursor: pointer; transition: background-color 0.3s ease; font-size: 14px; text-align: left;
+        }
+        .template-btn:hover { background: #c8e6c9; }
+        @media (max-width: 968px) {
+            .budget-section { grid-template-columns: 1fr; }
+            .charts-section { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="/analytics-hub" class="nav-link">← Back to AI Analytics Hub</a>
+            <h1>📊 AI Budget Analyzer</h1>
+            <p>Intelligent budget feasibility analysis with AI-powered recommendations and success prediction</p>
+        </div>
+        
+        <div class="budget-section">
+            <div class="input-panel">
+                <h3>💰 Create AI Budget Analysis</h3>
+                <form id="budgetForm">
+                    <div class="form-group">
+                        <label for="budgetName">Budget Category</label>
+                        <input type="text" id="budgetName" name="name" 
+                               placeholder="e.g., Groceries, Entertainment, Transportation" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="budgetAmount">Budget Amount ($)</label>
+                        <input type="number" id="budgetAmount" name="amount" step="0.01" 
+                               placeholder="500.00" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="budgetPeriod">Budget Period</label>
+                        <select id="budgetPeriod" name="period">
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly" selected>Monthly</option>
+                            <option value="quarterly">Quarterly</option>
+                            <option value="yearly">Yearly</option>
+                        </select>
+                    </div>
+                    <button type="submit" id="analyzeBtn" class="analyze-btn">
+                        🤖 AI Budget Feasibility Analysis
+                    </button>
+                </form>
+                
+                <div class="budget-templates">
+                    <h4>📋 Quick AI Analysis Templates:</h4>
+                    <button class="template-btn" onclick="loadTemplate('Groceries', '400', 'monthly')">
+                        🛒 Monthly Groceries ($400)
+                    </button>
+                    <button class="template-btn" onclick="loadTemplate('Entertainment', '200', 'monthly')">
+                        🎬 Entertainment Budget ($200)
+                    </button>
+                    <button class="template-btn" onclick="loadTemplate('Transportation', '300', 'monthly')">
+                        🚗 Transportation ($300)
+                    </button>
+                    <button class="template-btn" onclick="loadTemplate('Dining Out', '250', 'monthly')">
+                        🍽️ Dining Out ($250)
+                    </button>
+                </div>
+            </div>
+            
+            <div class="analysis-panel">
+                <div id="loadingState" class="loading" style="display: none;">
+                    🤖 AI is analyzing budget feasibility and generating success predictions...
+                </div>
+                
+                <div id="analysisResults" style="display: none;">
+                    <div class="score-display">
+                        <div class="realism-score" id="realismScore">--</div>
+                        <span class="score-label">AI Budget Realism Score</span>
+                        
+                        <div class="success-probability" id="successPanel">
+                            <h4>🎯 AI Success Probability</h4>
+                            <div class="success-bar">
+                                <div id="successFill" class="success-fill" style="width: 0%"></div>
+                            </div>
+                            <p id="successText">--% AI-predicted likelihood of staying within budget</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="analysis-grid" id="analysisGrid" style="display: none;">
+            <!-- AI Analysis cards will be populated here -->
+        </div>
+        
+        <div class="charts-section" id="chartsSection" style="display: none;">
+            <div class="chart-container">
+                <h3>📈 AI Budget Allocation Breakdown</h3>
+                <canvas id="allocationChart" width="400" height="250"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3>📊 AI Success Factors Analysis</h3>
+                <canvas id="factorsChart" width="400" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let allocationChart, factorsChart;
+        
+        document.getElementById('budgetForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await analyzeBudget();
+        });
+        
+        async function analyzeBudget() {
+            const form = document.getElementById('budgetForm');
+            const formData = new FormData(form);
+            
+            const data = {
+                name: formData.get('name'),
+                amount: formData.get('amount'),
+                period: formData.get('period')
+            };
+            
+            // Show loading state
+            document.getElementById('loadingState').style.display = 'block';
+            document.getElementById('analysisResults').style.display = 'none';
+            document.getElementById('analyzeBtn').disabled = true;
+            document.getElementById('analyzeBtn').textContent = '🔄 AI Analyzing...';
+            
+            try {
+                const response = await fetch('/analyze-budget', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    displayBudgetAnalysis(result, data);
+                } else {
+                    throw new Error(result.error || 'AI Budget analysis failed');
+                }
+                
+            } catch (error) {
+                console.error('AI Budget analysis error:', error);
+                displayError(error.message);
+            } finally {
+                document.getElementById('loadingState').style.display = 'none';
+                document.getElementById('analyzeBtn').disabled = false;
+                document.getElementById('analyzeBtn').textContent = '🤖 AI Budget Feasibility Analysis';
+            }
+        }
+        
+        function displayBudgetAnalysis(result, originalData) {
+            // Update scores
+            const realismPercent = Math.round(result.realism_score * 100);
+            const successPercent = Math.round(result.success_probability * 100);
+            
+            document.getElementById('realismScore').textContent = realismPercent + '%';
+            document.getElementById('successFill').style.width = successPercent + '%';
+            document.getElementById('successText').textContent = 
+                successPercent + '% AI-predicted likelihood of staying within budget';
+            
+            // Color code the success probability
+            const successPanel = document.getElementById('successPanel');
+            if (successPercent >= 80) {
+                successPanel.style.background = 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)';
+            } else if (successPercent >= 60) {
+                successPanel.style.background = 'linear-gradient(135deg, #FF9800 0%, #F57C00 100%)';
+            } else {
+                successPanel.style.background = 'linear-gradient(135deg, #F44336 0%, #D32F2F 100%)';
+            }
+            
+            // Update analysis grid
+            const analysisGrid = document.getElementById('analysisGrid');
+            analysisGrid.innerHTML = '';
+            
+            // Add analysis cards
+            if (result.recommendations) {
+                analysisGrid.appendChild(createAnalysisCard('💡 AI Recommendations', result.recommendations, 'recommendations-list'));
+            }
+            
+            if (result.risk_factors) {
+                analysisGrid.appendChild(createAnalysisCard('⚠️ AI Risk Assessment', result.risk_factors, 'risk-list'));
+            }
+            
+            if (result.optimization_suggestions) {
+                analysisGrid.appendChild(createAnalysisCard('⚡ AI Optimization Tips', result.optimization_suggestions, 'recommendations-list'));
+            }
+            
+            // AI Analysis Summary
+            const summaryCard = document.createElement('div');
+            summaryCard.className = 'analysis-card';
+            summaryCard.innerHTML = `
+                <h4>📋 AI Analysis Summary</h4>
+                <p><strong>Budget:</strong> $${originalData.amount} ${originalData.period}</p>
+                <p><strong>Category:</strong> ${originalData.name}</p>
+                <p><strong>AI Analysis:</strong> ${result.analysis}</p>
+                <p><strong>AI Comparable Budgets:</strong> ${result.comparable_budgets}</p>
+            `;
+            analysisGrid.appendChild(summaryCard);
+            
+            // Show results and charts
+            document.getElementById('analysisResults').style.display = 'block';
+            document.getElementById('analysisGrid').style.display = 'grid';
+            document.getElementById('chartsSection').style.display = 'grid';
+            
+            // Update charts
+            updateBudgetCharts(result, originalData);
+        }
+        
+        function createAnalysisCard(title, items, listClass) {
+            const card = document.createElement('div');
+            card.className = 'analysis-card';
+            
+            const titleElement = document.createElement('h4');
+            titleElement.textContent = title;
+            card.appendChild(titleElement);
+            
+            const list = document.createElement('ul');
+            list.className = listClass;
+            
+            items.forEach(item => {
+                const listItem = document.createElement('li');
+                listItem.textContent = item;
+                list.appendChild(listItem);
+            });
+            
+            card.appendChild(list);
+            return card;
+        }
+        
+        function updateBudgetCharts(result, originalData) {
+            // Budget Allocation Chart
+            if (allocationChart) allocationChart.destroy();
+            
+            const allocationCtx = document.getElementById('allocationChart').getContext('2d');
+            const budgetAmount = parseFloat(originalData.amount);
+            
+            allocationChart = new Chart(allocationCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Planned Budget', 'AI Recommended Buffer', 'AI Optimization Potential'],
+                    datasets: [{
+                        data: [budgetAmount, budgetAmount * 0.1, budgetAmount * 0.05],
+                        backgroundColor: ['#11998e', '#38ef7d', '#ff9f43'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+            
+            // AI Success Factors Chart
+            if (factorsChart) factorsChart.destroy();
+            
+            const factorsCtx = document.getElementById('factorsChart').getContext('2d');
+            factorsChart = new Chart(factorsCtx, {
+                type: 'radar',
+                data: {
+                    labels: ['AI Realism', 'Historical Data', 'Seasonal Factors', 'Income Ratio', 'Category Balance'],
+                    datasets: [{
+                        label: 'AI Budget Feasibility Factors',
+                        data: [result.realism_score * 100, 70, 80, 85, 75],
+                        borderColor: '#11998e',
+                        backgroundColor: 'rgba(17, 153, 142, 0.2)',
+                        pointBackgroundColor: '#11998e',
+                        pointBorderColor: '#11998e',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: '#11998e'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { r: { beginAtZero: true, max: 100 } }
+                }
+            });
+        }
+        
+        function displayError(message) {
+            document.getElementById('realismScore').textContent = '--';
+            document.getElementById('successFill').style.width = '0%';
+            document.getElementById('successText').textContent = 'AI Analysis failed: ' + message;
+            document.getElementById('analysisResults').style.display = 'block';
+        }
+        
+        function loadTemplate(name, amount, period) {
+            document.getElementById('budgetName').value = name;
+            document.getElementById('budgetAmount').value = amount;
+            document.getElementById('budgetPeriod').value = period;
+        }
+    </script>
+</body>
+</html>

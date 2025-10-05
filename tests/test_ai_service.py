@@ -1,3 +1,10 @@
+"""
+AI Categorization Service Tests - Transaction Intelligence and Automation
+
+Tests the AI service that automatically categorizes transactions using machine learning.
+Validates both the service API and the categorization logic that helps users 
+organize their financial data intelligently.
+"""
 import pytest
 import requests
 import json

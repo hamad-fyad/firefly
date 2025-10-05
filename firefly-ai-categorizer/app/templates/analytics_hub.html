@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎯 AI Financial Analytics Hub</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh; padding: 20px;
+        }
+        .container {
+            max-width: 1600px; margin: 0 auto; background: white;
+            border-radius: 15px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); padding: 30px;
+        }
+        .header { text-align: center; margin-bottom: 40px; color: #333; }
+        .header h1 {
+            font-size: 3em; margin-bottom: 10px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        }
+        .header p { font-size: 1.2em; color: #666; margin-bottom: 20px; }
+        
+        .quick-stats {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px; margin-bottom: 40px;
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white; padding: 25px; border-radius: 12px; text-align: center;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1); transition: transform 0.3s ease;
+        }
+        .stat-card:hover { transform: translateY(-5px); }
+        .stat-card h3 { font-size: 2.2em; margin-bottom: 8px; }
+        .stat-card p { font-size: 1em; opacity: 0.9; }
+        
+        .analytics-grid {
+            display: grid; 
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px; 
+            margin-bottom: 40px;
+        }
+        .analytics-card {
+            background: #f8f9fa; 
+            padding: 20px; 
+            border-radius: 12px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.08); 
+            transition: all 0.3s ease;
+            border-left: 5px solid;
+            min-height: 280px;
+            display: flex;
+            flex-direction: column;
+        }
+        .analytics-card:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(0,0,0,0.15); }
+        .analytics-card h3 { margin-bottom: 15px; font-size: 1.4em; }
+        .analytics-card p { color: #666; margin-bottom: 20px; line-height: 1.6; }
+        .analytics-card .features { margin-bottom: 20px; }
+        .feature-tag {
+            display: inline-block; background: rgba(102, 126, 234, 0.1); color: #667eea;
+            padding: 4px 12px; border-radius: 15px; font-size: 0.85em; margin: 2px;
+        }
+        .access-btn {
+            width: 100%; padding: 10px; border: none; border-radius: 8px;
+            font-size: 0.9em; font-weight: 600; cursor: pointer; transition: all 0.3s ease;
+            text-decoration: none; display: inline-block; text-align: center;
+            margin-top: auto;
+        }
+        
+        .transaction-card { border-left-color: #667eea; }
+        .transaction-btn { background: #667eea; color: white; }
+        .transaction-btn:hover { background: #5a6fd8; transform: scale(1.02); }
+        
+        .budget-card { border-left-color: #11998e; }
+        .budget-btn { background: #11998e; color: white; }
+        .budget-btn:hover { background: #0f8a7e; transform: scale(1.02); }
+        
+        .insights-card { border-left-color: #ff9f43; }
+        .insights-btn { background: #ff9f43; color: white; }
+        .insights-btn:hover { background: #ff8f2b; transform: scale(1.02); }
+        
+        .patterns-card { border-left-color: #6c5ce7; }
+        .patterns-btn { background: #6c5ce7; color: white; }
+        .patterns-btn:hover { background: #5b4cdb; transform: scale(1.02); }
+        
+        .health-card { border-left-color: #00b894; }
+        .health-btn { background: #00b894; color: white; }
+        .health-btn:hover { background: #00a085; transform: scale(1.02); }
+        
+        .metrics-card { border-left-color: #e17055; }
+        .metrics-btn { background: #e17055; color: white; }
+        .metrics-btn:hover { background: #d63447; transform: scale(1.02); }
+        
+        .live-feed {
+            background: #f8f9fa; padding: 25px; border-radius: 12px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.08); margin-bottom: 30px;
+        }
+        .live-feed h3 { margin-bottom: 20px; color: #333; font-size: 1.4em; }
+        .feed-item {
+            display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid #eee;
+            transition: background-color 0.3s ease;
+        }
+        .feed-item:hover { background: rgba(102, 126, 234, 0.05); }
+        .feed-icon { font-size: 1.5em; margin-right: 15px; }
+        .feed-content { flex-grow: 1; }
+        .feed-time { color: #999; font-size: 0.85em; }
+        
+        .system-status {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px; margin-top: 30px;
+        }
+        .status-card {
+            background: white; padding: 20px; border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08); text-align: center;
+        }
+        .status-indicator {
+            width: 12px; height: 12px; border-radius: 50%; display: inline-block;
+            margin-right: 8px; animation: pulse 2s infinite;
+        }
+        .status-online { background: #00b894; }
+        .status-warning { background: #fdcb6e; }
+        .status-offline { background: #e84393; }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(0, 184, 148, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(0, 184, 148, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 184, 148, 0); }
+        }
+        
+        @media (max-width: 1200px) {
+            .analytics-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 768px) {
+            .analytics-grid { grid-template-columns: 1fr; gap: 15px; }
+            .quick-stats { grid-template-columns: repeat(2, 1fr); }
+            .analytics-card { min-height: auto; padding: 15px; }
+        }
+
+        .ai-badge {
+            display: inline-block;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: bold;
+            margin-left: 10px;
+            animation: glow 2s infinite alternate;
+        }
+
+        @keyframes glow {
+            from { box-shadow: 0 0 5px rgba(102, 126, 234, 0.5); }
+            to { box-shadow: 0 0 20px rgba(102, 126, 234, 0.8), 0 0 30px rgba(118, 75, 162, 0.6); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 AI Financial Analytics Hub</h1>
+            <p>Comprehensive AI-powered financial intelligence platform</p>
+            <p style="font-size: 1em; color: #999;">Real-time AI insights • OpenAI pattern analysis • Smart categorization • AI budget optimization</p>
+        </div>
+        
+        <div class="quick-stats" id="quickStats">
+            <div class="stat-card">
+                <h3 id="totalPredictions">--</h3>
+                <p>AI Predictions</p>
+            </div>
+            <div class="stat-card">
+                <h3 id="avgConfidence">--%</h3>
+                <p>AI Confidence</p>
+            </div>
+            <div class="stat-card">
+                <h3 id="activeCategories">--</h3>
+                <p>AI Categories</p>
+            </div>
+            <div class="stat-card">
+                <h3 id="systemAccuracy">--%</h3>
+                <p>AI Accuracy</p>
+            </div>
+        </div>
+        
+        <div class="analytics-grid">
+            <div class="analytics-card transaction-card">
+                <h3>🔍 AI Transaction Analyzer</h3>
+                <p>Intelligent real-time transaction analysis with AI categorization using OpenAI API, confidence scoring, and pattern recognition.</p>
+                <div class="features">
+                    <span class="feature-tag">OpenAI Categorization</span>
+                    <span class="feature-tag">AI Confidence Scoring</span>
+                    <span class="feature-tag">AI Spending Analysis</span>
+                    <span class="feature-tag">AI Pattern Detection</span>
+                </div>
+                <a href="/transaction-analyzer" class="access-btn transaction-btn">🚀 Launch AI Analyzer</a>
+            </div>
+            
+            <div class="analytics-card insights-card">
+                <h3>💡 AI Financial Insights<span class="ai-badge">Real-time AI</span></h3>
+                <p>Real-time AI financial health monitoring with spending velocity analysis and intelligent recommendations.</p>
+                <div class="features">
+                    <span class="feature-tag">AI Real-time Monitoring</span>
+                    <span class="feature-tag">AI Spending Velocity</span>
+                    <span class="feature-tag">AI Budget Health</span>
+                    <span class="feature-tag">AI Smart Alerts</span>
+                </div>
+                <button class="access-btn insights-btn" onclick="showInsights()">🔮 View AI Insights</button>
+            </div>
+            
+            <div class="analytics-card patterns-card">
+                <h3>📈 AI Spending Patterns<span class="ai-badge">ML Powered</span></h3>
+                <p>Advanced AI pattern recognition with trend analysis, behavioral insights, and future spending predictions.</p>
+                <div class="features">
+                    <span class="feature-tag">AI Pattern Recognition</span>
+                    <span class="feature-tag">AI Trend Analysis</span>
+                    <span class="feature-tag">AI Predictions</span>
+                    <span class="feature-tag">AI Behavioral Insights</span>
+                </div>
+                <button class="access-btn patterns-btn" onclick="showPatterns()">📊 AI Pattern Analysis</button>
+            </div>
+            
+            <div class="analytics-card health-card">
+                <h3>❤️ AI Financial Health Score<span class="ai-badge">AI Wellness</span></h3>
+                <p>Comprehensive AI financial wellness assessment with scoring, factor analysis, and actionable improvement recommendations.</p>
+                <div class="features">
+                    <span class="feature-tag">AI Health Scoring</span>
+                    <span class="feature-tag">AI Factor Analysis</span>
+                    <span class="feature-tag">AI Trend Tracking</span>
+                    <span class="feature-tag">AI Action Items</span>
+                </div>
+                <button class="access-btn health-btn" onclick="showHealthScore()">💪 AI Health Check</button>
+            </div>
+            
+            <div class="analytics-card metrics-card">
+                <h3>📋 AI System Metrics<span class="ai-badge">Performance AI</span></h3>
+                <p>Detailed AI performance metrics dashboard with real-time monitoring of AI system performance and accuracy.</p>
+                <div class="features">
+                    <span class="feature-tag">AI Performance Metrics</span>
+                    <span class="feature-tag">AI Accuracy Tracking</span>
+                    <span class="feature-tag">AI System Health</span>
+                    <span class="feature-tag">AI Real-time Updates</span>
+                </div>
+                <a href="/metrics" class="access-btn metrics-btn">📊 View AI Metrics</a>
+            </div>
+        </div>
+        
+        <div class="live-feed">
+            <h3>🔴 Live AI Activity Feed</h3>
+            <div id="activityFeed">
+                <div class="feed-item">
+                    <div class="feed-icon">🤖</div>
+                    <div class="feed-content">
+                        <div>AI system initialized with OpenAI integration</div>
+                        <div class="feed-time">System startup</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="system-status">
+            <div class="status-card">
+                <h4><span class="status-indicator status-online"></span>AI Service</h4>
+                <p id="aiStatus">Checking...</p>
+            </div>
+            <div class="status-card">
+                <h4><span class="status-indicator status-online"></span>Database</h4>
+                <p id="dbStatus">Checking...</p>
+            </div>
+            <div class="status-card">
+                <h4><span class="status-indicator status-online"></span>OpenAI API</h4>
+                <p id="openaiStatus">Checking...</p>
+            </div>
+            <div class="status-card">
+                <h4><span class="status-indicator status-online"></span>Webhook Service</h4>
+                <p id="webhookStatus">Checking...</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Load initial data and status
+        document.addEventListener('DOMContentLoaded', function() {
+            loadQuickStats();
+            checkSystemStatus();
+            startLiveFeed();
+            setInterval(loadQuickStats, 30000); // Refresh every 30 seconds
+            setInterval(checkSystemStatus, 60000); // Check status every minute
+        });
+        
+        async function loadQuickStats() {
+            try {
+                const response = await fetch('/api/metrics');
+                const data = await response.json();
+                
+                document.getElementById('totalPredictions').textContent = data.predictions_count || '--';
+                document.getElementById('avgConfidence').textContent = 
+                    data.summary?.prediction_stats?.avg_confidence ? 
+                    Math.round(data.summary.prediction_stats.avg_confidence * 100) + '%' : '--%';
+                document.getElementById('activeCategories').textContent = 
+                    data.summary?.prediction_stats?.unique_categories || '--';
+                document.getElementById('systemAccuracy').textContent = 
+                    data.accuracy?.overall_accuracy ? 
+                    Math.round(data.accuracy.overall_accuracy * 100) + '%' : '--%';
+                
+                addToFeed('🤖', `AI updated stats: ${data.predictions_count} predictions processed`);
+            } catch (error) {
+                console.error('Failed to load AI stats:', error);
+            }
+        }
+        
+        async function checkSystemStatus() {
+            try {
+                const response = await fetch('/health');
+                const health = await response.json();
+                
+                document.getElementById('aiStatus').textContent = 
+                    health.model_type === 'openai' ? 'Online' : 'Fallback Mode';
+                document.getElementById('dbStatus').textContent = 
+                    health.database_status === 'available' ? 'Connected' : 'File Mode';
+                document.getElementById('openaiStatus').textContent = 
+                    health.model_type === 'openai' ? 'Connected' : 'Unavailable';
+                
+                // Check webhook service
+                try {
+                    const webhookResponse = await fetch('http://localhost:8000/health');
+                    document.getElementById('webhookStatus').textContent = 
+                        webhookResponse.ok ? 'Online' : 'Offline';
+                } catch {
+                    document.getElementById('webhookStatus').textContent = 'Offline';
+                }
+                
+            } catch (error) {
+                console.error('Failed to check AI system status:', error);
+            }
+        }
+        
+        function startLiveFeed() {
+            addToFeed('🚀', 'AI Analytics Hub loaded and ready');
+            addToFeed('🔍', 'Real-time AI monitoring active');
+            
+            // Simulate AI activity
+            setInterval(() => {
+                const activities = [
+                    ['🤖', 'AI categorization completed'],
+                    // ['📊', 'AI budget analysis performed'],
+                    ['💡', 'New AI insight generated'],
+                    ['📈', 'AI pattern analysis updated'],
+                    ['❤️', 'AI health score recalculated'],
+                    ['🧠', 'OpenAI API processing completed'],
+                    ['⚡', 'AI confidence score updated']
+                ];
+                const activity = activities[Math.floor(Math.random() * activities.length)];
+                addToFeed(activity[0], activity[1]);
+            }, 45000); // Add AI activity every 45 seconds
+        }
+        
+        function addToFeed(icon, message) {
+            const feed = document.getElementById('activityFeed');
+            const item = document.createElement('div');
+            item.className = 'feed-item';
+            item.innerHTML = `
+                <div class="feed-icon">${icon}</div>
+                <div class="feed-content">
+                    <div>${message}</div>
+                    <div class="feed-time">${new Date().toLocaleTimeString()}</div>
+                </div>
+            `;
+            
+            feed.insertBefore(item, feed.firstChild);
+            
+            // Keep only last 5 items
+            while (feed.children.length > 5) {
+                feed.removeChild(feed.lastChild);
+            }
+        }
+        
+        async function showInsights() {
+            try {
+                const response = await fetch('/analytics/insights');
+                const insights = await response.json();
+                
+                alert(`🤖 Current AI Financial Insights: 
+                      💨 AI Spending Velocity: ${insights.spending_velocity}
+                      ❤️ AI Budget Health: ${insights.budget_health}
+                      🤖 AI Confidence: ${insights.ai_confidence}
+                      ⚠️ AI Anomalies: ${insights.anomalies_detected}
+                      💡 AI Recommendations:\n${insights.recommendations?.join('\n') || 'None'}`);
+            } catch (error) {
+                alert('Unable to load AI insights at this time');
+            }
+        }
+        
+        async function showPatterns() {
+            try {
+                const response = await fetch('/analytics/patterns');
+                const patterns = await response.json();
+                
+                const topCategory = patterns.trends?.most_frequent_category || 'N/A';
+                const avgDaily = patterns.trends?.average_daily_transactions || 0;
+                
+                alert(`🤖 AI Spending Pattern Analysis:
+                      🏆 AI Top Category: ${topCategory}
+                      📊 AI Avg Daily Transactions: ${avgDaily.toFixed(1)}
+                      🔮 AI Predictions: ${patterns.predictions?.budget_recommendations?.join(', ') || 'Analyzing...'}`);
+            } catch (error) {
+                alert('Unable to load AI patterns at this time');
+            }
+        }
+        
+        async function showHealthScore() {
+            try {
+                const response = await fetch('/analytics/health-score');
+                const health = await response.json();
+
+                alert(`🤖 AI Financial Health Assessment:
+                      🎯 AI Overall Score: ${health.health_score}
+                      🤖 AI Accuracy: ${health.factors?.ai_categorization_accuracy}
+                      📊 AI Usage Score: ${health.factors?.system_usage}
+                      📈 AI Trend: ${health.trend}
+                      💡 AI Action Items:\n${health.action_items?.join('\n') || 'None'}`);
+            } catch (error) {
+                alert('Unable to load AI health score at this time');
+            }
+        }
+    </script>
+</body>
+</html>

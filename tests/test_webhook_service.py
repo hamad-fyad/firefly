@@ -1,3 +1,10 @@
+"""
+Webhook Service Tests - Real-time Financial Event Processing
+
+Tests webhook handling for real-time financial events and AI categorization.
+Webhooks enable immediate processing of Firefly III events like new transactions,
+triggering automatic categorization and financial intelligence workflows.
+"""
 import pytest
 import requests
 import json

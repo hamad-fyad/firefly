@@ -1,3 +1,10 @@
+"""
+AI Unit Tests - Machine Learning Logic and Categorization Intelligence
+
+Tests AI categorization algorithms, model training, and prediction accuracy.
+Unit tests for machine learning components that automatically classify
+financial transactions into appropriate categories.
+"""
 import pytest
 import requests
 import json
